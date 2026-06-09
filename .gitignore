@@ -1,0 +1,24 @@
+# node
+node_modules/
+app/dist/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# data (large source dumps + intermediates; regenerable)
+data/raw/
+data/derived/
+
+# generated app data (rebuilt by the pipeline)
+app/public/cards.json
+app/public/teams.json
+app/public/elo.json
+
+# os
+.DS_Store
+
+# secrets
+.env
+*.local

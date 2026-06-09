@@ -1,0 +1,13 @@
+[build]
+  command   = "npm install && npm run build"
+  publish   = "dist"
+
+[[headers]]
+  for = "/cards.json"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/teams.json"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"

@@ -1,0 +1,43 @@
+{
+  "app.title": "Total Football",
+  "app.tagline": "Build a World Cup squad. See how far it goes.",
+  "loading": "LOADING SQUADS…",
+
+  "era.2026": "2026 Only",
+  "era.modern": "Modern",
+  "era.alltime": "All-Time",
+  "era.2026.desc": "The 48 current squads. Pure team draw, no year.",
+  "era.modern.desc": "1970–2026. Draw a year and a team.",
+  "era.alltime.desc": "1930–2026. Draw a year and a team. Everything.",
+
+  "mode.classic": "Classic",
+  "mode.diehard": "Diehard",
+  "mode.classic.desc": "Full stats visible.",
+  "mode.diehard.desc": "No stats. Name recognition only.",
+
+  "action.play": "PLAY",
+  "action.spin": "SPIN",
+  "action.respin": "RESPIN",
+  "action.commit": "COMMIT",
+  "action.runIt": "RUN IT BACK",
+  "action.share": "SHARE",
+  "action.menu": "MENU",
+  "action.leaderboard": "LEADERBOARD",
+
+  "tier.champions": "Champions",
+  "tier.runnerUp": "Runner-Up",
+  "tier.semifinalists": "Semifinalists",
+  "tier.quarterfinalists": "Quarterfinalists",
+  "tier.roundOf16": "Round of 16",
+  "tier.groupExit": "Group Stage Exit",
+
+  "result.scored": "scored",
+  "result.conceded": "conceded",
+  "result.differential": "differential",
+  "result.elo": "Elo",
+
+  "pos.GK": "Goalkeeper",
+  "pos.DF": "Defender",
+  "pos.MF": "Midfielder",
+  "pos.FW": "Forward"
+}

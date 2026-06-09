@@ -1,0 +1,14 @@
+{
+  "name": "Total Football: World Cup Squad Builder",
+  "short_name": "Total Football",
+  "description": "Draft a World Cup squad from real players across the eras and run it through a simulated knockout tournament.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a1f14",
+  "theme_color": "#0b6b3a",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
