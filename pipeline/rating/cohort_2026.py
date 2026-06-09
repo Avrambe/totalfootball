@@ -127,6 +127,35 @@ TEAM_CODE_OVERRIDES = {
 }
 
 
+# Transfermarkt sub_position -> our granular token (Spec §4 taxonomy). Blank/unmapped -> bucket only.
+SUB_TO_TOKEN = {
+    "Goalkeeper": "GK",
+    "Centre-Back": "CB", "Left-Back": "LB", "Right-Back": "RB",
+    "Defensive Midfield": "CDM", "Central Midfield": "CM", "Attacking Midfield": "CAM",
+    "Left Midfield": "LM", "Right Midfield": "RM",
+    "Left Winger": "LW", "Right Winger": "RW",
+    "Centre-Forward": "ST", "Second Striker": "ST",
+}
+TOKEN_LINE = {
+    "GK": "GK", "CB": "DF", "LB": "DF", "RB": "DF", "LWB": "DF", "RWB": "DF",
+    "CDM": "MF", "CM": "MF", "CAM": "MF", "LM": "MF", "RM": "MF",
+    "LW": "FW", "RW": "FW", "ST": "FW",
+}
+
+
+def _eligible_positions(bucket: str, sub: str) -> list[str]:
+    """Bucket + (where known) granular token. Granular ADDS a line, never replaces the rated one:
+    a card's 1-99 was normalized within its bucket, so a cross-line token (e.g. Kimmich DF + CDM)
+    must not silently move him to another pool. Same-line token -> [token] (line recoverable via the
+    hierarchy); cross-line -> [bucket, token]; no sub_position -> [bucket]."""
+    token = SUB_TO_TOKEN.get(sub or "")
+    if not token:
+        return [bucket]
+    if TOKEN_LINE[token] == bucket:
+        return [token]
+    return [bucket, token]
+
+
 def _team_name_to_code() -> dict:
     """Authoritative name -> ISO-3 from the Fjelstul spine, plus the 2026 overrides."""
     wc = json.loads((RAW / "fjelstul" / "worldcup.json").read_text(encoding="utf-8"))
@@ -176,12 +205,13 @@ def build_cards() -> list[dict]:
                     mv_w = MV_MAX_WEIGHT * yw
                     consensus = combine._blend({"H": h, "MV": mv}, {"H": 1 - mv_w, "MV": mv_w})
                     raw = max(raw, CONSERVATIVE * consensus)
+            sub_pos = club_form.sub_position(club_idx, name, bdate)
             cards.append({
                 "player_id": f"2026-{tcode or 'XXX'}-{_slug(name)}",
                 "name": name, "team_code": tcode, "team_name": tname, "year": YEAR,
                 "position": pos,
-                "eligible_positions": [pos],
-                "sub_position": club_form.sub_position(club_idx, name, bdate),
+                "eligible_positions": _eligible_positions(pos, sub_pos),
+                "sub_position": sub_pos,
                 "age": age, "g_label": g_label, "g_floor": g_floor,
                 "volatility": round(YOUTH_VOL * yw, 3),
                 "_raw": raw, "_has_club": h is not None,

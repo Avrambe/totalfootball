@@ -38,7 +38,7 @@ modeled→real percentile switchover (real at ≥18 samples), canvas share-image
 Net-new: Capacitor, i18n, and all soccer-specific logic.
 
 ## Current status (2026-06-08)
-Phases 0–3 done. Phases 0–2: scaffold + plumbing, data acquisition, rating pipeline (all §3.3
+Phases 0–4 done. Phases 0–2: scaffold + plumbing, data acquisition, rating pipeline (all §3.3
 sanity targets pass). Elo coverage spans EVERY men's WC participant at its tournament year
 (489/489, 1930–2022) via eloratings.net year-end snapshots name-matched against their authoritative
 `en.teams.tsv` dictionary — `pipeline/download/elo_full.py` → `data/raw/elo_full/elo_wc.json` →
@@ -63,7 +63,18 @@ overperform. Lifted Yamal 86→95, Cubarsí 82→91, Pedri 89→92; low-value te
 Each 2026 card also carries a `volatility` tag (0.15 youngest → 0 by 25) for the Phase 6 engine to
 make young players boom-or-bust per match (rating itself stays a clean point estimate).
 All sanity targets pass (Mbappé 99, Haaland 99, Bellingham 96, Messi 92; historical unchanged).
-Next: Phase 4 (position engine).
+
+Phase 4 (position engine): `app/src/positions/` — 14-token taxonomy (`taxonomy.js`:
+GK; CB/LB/RB/LWB/RWB; CDM/CM/CAM/LM/RM; LW/RW/ST, each with line+zone+depth), formations-as-data
+(`formations.js`: 8 shapes 4-3-3…5-4-1, granular slots + bipartite `formationsHolding` for the
+Phase-5 tightening dropdown), and `canPlay(player, slot)` (`canPlay.js`) as the single source of
+truth: line floor (cross-line = only hard no) → exact-token/bucket-only = 1.0 → off-position penalty
+scaled by zone/depth, floored at `OFF_POS_FLOOR=0.88` (one tunable, zero-able). The pipeline
+(`cohort_2026.py`) now populates 2026 cards' `eligible_positions` with granular tokens via
+`SUB_TO_TOKEN`: 726 cards carry a granular token, and **73 cross-line versatile players** (Kimmich
+DF+CDM, Maeda MF+LW, Almirón MF+RW) get a multi-line array — granular ADDS a line, never replaces the
+rated bucket (rating was normalized within bucket). Historical cards stay bucket-only (0 granular).
+Verify: `node app/src/positions/verify.mjs` (24/24 pass). Next: Phase 5 (draft UX).
 
 ## Working norms (user is non-technical)
 - Explain *why*, not just *what*; flag tradeoffs. Never commit/push without explicit instruction.
