@@ -1,24 +1,35 @@
 import React, { useState, useEffect } from "react";
-import { loadLocale, t } from "./i18n/index.js";
+import { loadLocale, t, detectLocale, storedLocale, setStoredLocale, DEFAULT_LOCALE } from "./i18n/index.js";
 import { loadGameData, GAME } from "./data/loader.js";
-
-const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap');`;
-
-const C = {
-  pitchDeep: "#0a1f14",
-  pitch: "#0b6b3a",
-  gold: "#e9c46a",
-  chalk: "#f3f4ef",
-  ink: "#0a140e",
-};
+import { C, FONTS, splash } from "./theme.js";
+import { runTournament } from "./engine/index.js";
+import Title from "./screens/Title.jsx";
+import Draft from "./screens/Draft.jsx";
+import Result from "./screens/Result.jsx";
+import Leaderboard from "./screens/Leaderboard.jsx";
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const [screen, setScreen] = useState("title");
+  const [config, setConfig] = useState(null); // { era, mode }
+  const [squad, setSquad] = useState(null);   // completed XI (seating)
+  const [result, setResult] = useState(null); // simulated tournament result
+  const [clientKey, setClientKey] = useState(null); // idempotency key for the current run's post
+  const [gamePosted, setGamePosted] = useState(false); // session guard against double-post
+  const [lbReturn, setLbReturn] = useState("title");    // where the leaderboard's back button returns
+  const [lang, setLang] = useState(DEFAULT_LOCALE); // active locale; bumping it re-renders the tree
 
   useEffect(() => {
-    // Load locale strings first, then attempt to load game data (which may not exist yet).
-    Promise.all([loadLocale("en"), loadGameData()]).then(() => setReady(true));
+    const initial = storedLocale() || detectLocale();
+    Promise.all([loadLocale(initial), loadGameData()]).then(() => { setLang(initial); setReady(true); });
   }, []);
+
+  // t() reads a module global, so bumping `lang` at the root is what re-renders with the new strings.
+  const onSetLang = async (loc) => {
+    await loadLocale(loc);
+    setStoredLocale(loc);
+    setLang(loc);
+  };
 
   if (!ready) {
     return (
@@ -28,72 +39,73 @@ export default function App() {
           TOTAL FOOTBALL
         </div>
         <div style={{ fontFamily: "Oswald, sans-serif", marginTop: 14, fontSize: 13, letterSpacing: ".25em", color: C.chalk, opacity: 0.55 }}>
-          LOADING…
+          {t("loading")}
         </div>
       </div>
     );
   }
 
-  const hasData = !!GAME.cards;
+  if (!GAME.cards) {
+    return (
+      <div style={splash}>
+        <style>{FONTS}</style>
+        <div style={{ fontFamily: "Anton, sans-serif", fontSize: 48, color: C.gold }}>TOTAL FOOTBALL</div>
+        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "#f4a261", marginTop: 18, textAlign: "center", maxWidth: 420 }}>
+          No cards.json — run the pipeline (`python -m pipeline.build_cards`) then `npm run build`.
+        </div>
+      </div>
+    );
+  }
 
+  if (screen === "title") {
+    return (
+      <Title
+        lang={lang}
+        onSetLang={onSetLang}
+        onStart={(era, mode) => { setConfig({ era, mode }); setScreen("draft"); }}
+        onLeaderboard={() => { setLbReturn("title"); setScreen("leaderboard"); }}
+      />
+    );
+  }
+  if (screen === "draft") {
+    return (
+      <Draft
+        config={config}
+        onComplete={({ seating, formationName }) => {
+          setSquad(seating);
+          setResult(runTournament(seating, formationName, config.era));
+          setClientKey(newClientKey());
+          setGamePosted(false);
+          setScreen("result");
+        }}
+        onExit={() => setScreen("title")}
+      />
+    );
+  }
+  if (screen === "leaderboard") {
+    return (
+      <Leaderboard
+        initial={config}
+        onBack={() => setScreen(lbReturn)}
+      />
+    );
+  }
   return (
-    <div style={splash}>
-      <style>{FONTS}</style>
-      <div style={{ fontFamily: "Anton, sans-serif", fontSize: 58, color: C.gold, letterSpacing: ".02em", textAlign: "center" }}>
-        {t("app.title").toUpperCase()}
-      </div>
-      <div style={{ fontFamily: "Oswald, sans-serif", marginTop: 10, fontSize: 16, color: C.chalk, opacity: 0.85, textAlign: "center", maxWidth: 420, padding: "0 20px" }}>
-        {t("app.tagline")}
-      </div>
-
-      <div style={{ marginTop: 28, display: "flex", gap: 10 }}>
-        {["era.2026", "era.modern", "era.alltime"].map((k) => (
-          <div key={k} style={eraChip}>{t(k)}</div>
-        ))}
-      </div>
-      <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
-        {["mode.classic", "mode.diehard"].map((k) => (
-          <div key={k} style={modeChip}>{t(k)}</div>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 30, fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: hasData ? "#7CFC9A" : "#f4a261" }}>
-        {hasData
-          ? `cards.json loaded — ${Array.isArray(GAME.cards) ? GAME.cards.length : Object.keys(GAME.cards).length} entries`
-          : "Phase 0 scaffold — run the pipeline to generate cards.json"}
-      </div>
-    </div>
+    <Result
+      config={config}
+      squad={squad}
+      result={result}
+      clientKey={clientKey}
+      gamePosted={gamePosted}
+      setGamePosted={setGamePosted}
+      onAgain={() => setScreen("draft")}
+      onMenu={() => setScreen("title")}
+      onLeaderboard={() => { setLbReturn("result"); setScreen("leaderboard"); }}
+    />
   );
 }
 
-const splash = {
-  background: `radial-gradient(1200px 600px at 50% -10%, ${C.pitch} 0%, ${C.pitchDeep} 60%)`,
-  minHeight: "100vh",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const eraChip = {
-  fontFamily: "Oswald, sans-serif",
-  fontSize: 14,
-  fontWeight: 700,
-  color: C.ink,
-  background: C.gold,
-  padding: "8px 14px",
-  borderRadius: 3,
-  letterSpacing: ".03em",
-};
-
-const modeChip = {
-  fontFamily: "Oswald, sans-serif",
-  fontSize: 13,
-  fontWeight: 600,
-  color: C.chalk,
-  background: "rgba(255,255,255,.08)",
-  border: "1px solid rgba(255,255,255,.25)",
-  padding: "7px 14px",
-  borderRadius: 3,
-  letterSpacing: ".03em",
-};
+function newClientKey() {
+  try { if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}

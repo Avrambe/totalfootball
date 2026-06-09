@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
+  <rect width="640" height="160" y="0" fill="#0c2a8c"/>
+  <rect width="640" height="160" y="160" fill="#ffffff"/>
+  <rect width="640" height="160" y="320" fill="#de1f26"/>
+  <!-- centered red star with gold edge -->
+  <path d="M320 150 l30 92 h97 l-78 57 30 92 -79-57 -79 57 30-92 -78-57 h97 z"
+        fill="#de1f26" stroke="#ffd700" stroke-width="10" stroke-linejoin="round"/>
+</svg>

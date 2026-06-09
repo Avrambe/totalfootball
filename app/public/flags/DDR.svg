@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
+  <rect width="640" height="160" y="0" fill="#000000"/>
+  <rect width="640" height="160" y="160" fill="#dd0000"/>
+  <rect width="640" height="160" y="320" fill="#ffce00"/>
+  <!-- state emblem: hammer + compass in a wreath ring -->
+  <g transform="translate(320 240)">
+    <circle r="72" fill="none" stroke="#ffce00" stroke-width="10"/>
+    <g fill="#ffce00" stroke="#000" stroke-width="2">
+      <rect x="-8" y="-44" width="16" height="70" transform="rotate(20)"/>
+      <rect x="-26" y="-50" width="52" height="18" transform="rotate(20)"/>
+    </g>
+    <path d="M-34 30 a40 40 0 0 1 68 0" fill="none" stroke="#ffce00" stroke-width="8"/>
+  </g>
+</svg>

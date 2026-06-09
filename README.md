@@ -1,8 +1,8 @@
 # Total Football
 
-A World Cup squad-builder game (working title). Spin to draw a country (and, in two of three
+A football squad-builder game (working title). Spin to draw a country (and, in two of three
 eras, a year), draft real players into an 11-slot formation, then run the squad through a
-simulated knockout tournament against real historical World Cup teams. Scored on goal
+simulated knockout tournament against real historical national teams. Scored on goal
 differential, how far you advanced, and an Elo rating (the leaderboard chase number).
 
 Soccer counterpart to **162-0**; reuses its build/deploy/share/leaderboard plumbing patterns.
@@ -43,10 +43,22 @@ Licensed CC-BY-SA 4.0. Modifications made.
 mirrors. Used build-time only to compute our own derived ratings; raw statistics are not
 redistributed.
 
-**Transfermarkt** appearance data (minutes / goals / assists), via the Kaggle "player-scores"
-dataset (David Cariboo). Used build-time only as an objective current-form signal to compute our
-own derived 1–99 ratings; raw data and market valuations are not used or redistributed.
+**Transfermarkt** appearance data (minutes / goals / assists) and market valuations, via the
+Kaggle "player-scores" dataset (David Cariboo). Used build-time only to compute our own derived
+1–99 ratings; raw data is not redistributed. For the 2026 cohort, market value is used as one
+broad, **age-corrected** current-skill signal (we divide out the well-known youth resale premium
+and veteran discount) so quality players in leagues we lack game-level data for are still rated.
+
+**2026 "best players" ranking lists.** The elite of the 2026 cohort is anchored to a merge of
+several published "best players entering the 2026 World Cup" rankings — ESPN, FOX Sports, NBC
+Sports, 365scores, and the 2025 Ballon d'Or final ranking (the season-award list, down-weighted).
+Only the factual rank positions are used, build-time, merged into our own derived rating; the
+lists are not redistributed. We do **not** use EA/FIFA ratings (proprietary IP).
 
 Ballon d'Or and World Soccer Player of the Year results are factual award data; sources cited
-are France Football and World Soccer / RSSSF. Any redistributed dataset incorporating CC-BY-SA
-material must itself carry CC-BY-SA.
+are France Football and World Soccer / RSSSF. For the historical cohort these awards (plus the
+France Football retrospective winners) **anchor the elite rating** directly — a player's award
+standing in a window around a tournament sets a scarce top-end rating, with World Cup tournament
+performance used only as a fallback for players the award lists don't cover. Only the factual rank
+positions are used, build-time, merged into our own derived 1–99 rating; the lists are not
+redistributed. Any redistributed dataset incorporating CC-BY-SA material must itself carry CC-BY-SA.

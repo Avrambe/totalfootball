@@ -37,32 +37,72 @@ Supabase leaderboard (plain `fetch` to `submit_score`/`real_pct` RPCs — no JS 
 modeled→real percentile switchover (real at ≥18 samples), canvas share-image + share chain.
 Net-new: Capacitor, i18n, and all soccer-specific logic.
 
-## Current status (2026-06-08)
-Phases 0–4 done. Phases 0–2: scaffold + plumbing, data acquisition, rating pipeline (all §3.3
+## Current status (2026-06-09)
+Phases 0–10 done; Phase 11 (Capacitor/iOS) is the only remaining build phase. Phases 0–2: scaffold + plumbing, data acquisition, rating pipeline (all §3.3
 sanity targets pass). Elo coverage spans EVERY men's WC participant at its tournament year
 (489/489, 1930–2022) via eloratings.net year-end snapshots name-matched against their authoritative
 `en.teams.tsv` dictionary — `pipeline/download/elo_full.py` → `data/raw/elo_full/elo_wc.json` →
 `app/public/elo.json` (team_code → {year: Elo}); the 2026 cohort's live Elo is folded in from the
 Kaggle 2026 set. Caveat: year-end snapshot is a proxy for at-WC strength.
 
-Phase 3 (2026 cohort): `pipeline/rating/cohort_2026.py` rates all 1,245 announced 2026 squad
-players from a current-form proxy — composite = blend(H club-form .60, G stature .25, base .15) ×
-age factor, normalized SEPARATELY within position → 1–99, G floor applied. Layer H
-(`rating/club_form.py`) is real: FBref Big-5 (preferred, incl. keeper Save%/CS%) + Transfermarkt
-"player-scores" appearances (objective minutes/goals/assists only, NEVER market value),
-league-tier weighted. **Data limitation:** the TM appearances dump only has game-level rows for ~14
-European leagues in the 2024-26 window — MLS / Saudi / Liga MX / Brazil / Argentina have ZERO rows,
-so club coverage tops out at 59%; uncovered players degrade to the 0.5 prior × age (+ stature floor
-for legends). Stature lookback widened to back=3 for 2026 so the 2023 Ballon d'Or (Messi) floors
-current legends in uncovered leagues. 4 debutants coded CPV/CUW/JOR/UZB, DR Congo→COD.
-**Young-player floor (refinement):** caps/stature reward accumulated career, so teenagers read low.
-Transfermarkt MARKET VALUE (the one forward-looking signal — exactly the youth premium that bans it
-from the general pool) is blended with recent club form as a lift-only FLOOR, scoped to the young
-(full at age ≤19, fading to 0 by 25), conservatively shrunk (0.78) so they keep headroom to
-overperform. Lifted Yamal 86→95, Cubarsí 82→91, Pedri 89→92; low-value teen fillers untouched.
-Each 2026 card also carries a `volatility` tag (0.15 youngest → 0 by 25) for the Phase 6 engine to
-make young players boom-or-bust per match (rating itself stays a clean point estimate).
-All sanity targets pass (Mbappé 99, Haaland 99, Bellingham 96, Messi 92; historical unchanged).
+Phase 3 (2026 cohort) — **TWO-TIER rating (Phase 3-fix overhaul).** The first pass over-rated
+weak-league veterans (Konrad Laimer hit 98) because international caps masqueraded as skill and a
+separate within-position percentile crowded the top. Replaced with two tiers:
+- **Consensus tier (the elite)** — `pipeline/rating/consensus_2026.py`. The top is anchored to a
+  weighted-Borda merge of 5 published "best entering 2026" lists (ESPN 50, FOX top-30, NBC 25,
+  365scores 25, Ballon d'Or 2025 top-30 ×0.6). Merge is filtered to actual 2026 participants, then
+  a scarce rank→rating curve assigns ratings: #1–3 → **97 (the ceiling — Yamal/Dembélé/Mbappé; no
+  active 2026 player reaches 98/99, reserved for the historical pantheon)**, #4–5 → 96, then taper
+  ~0.42/rank down to the floor. `CONSENSUS_FLOOR = 82`. A matched player's rating is taken
+  DIRECTLY (no age factor — the lists already price age: Messi 92, Ronaldo 87, Salah 82).
+- **Composite tier (everyone else, ~1,100)** — `cohort_2026.py`. De-inflated proxy:
+  composite = blend(H club-form .45, **M age-corrected market value .30**, G stature .15, base .10)
+  × age factor; caps/international-standing REMOVED. M divides raw Transfermarkt market value by an
+  `_age_premium(age)` curve built from the cohort's own median-MV-by-age (removes the youth resale
+  premium + veteran discount) → a current-skill proxy that **rescues quality in uncovered leagues**
+  (Neymar 79, Kessié 77, Toney 81). Each card's composite percentile is then **quantile-matched to
+  the pooled HISTORICAL per-position distribution** (below the floor) for real cross-era
+  comparability, and capped at `CONSENSUS_FLOOR−1 = 81` so no non-listed player outranks a listed
+  one. `build_cards(hist_by_pos)` receives the historical ratings from `build_cards.py`.
+The raw-MV youth FLOOR is gone (consensus + age-corrected M handle youth); the `volatility` tag is
+KEPT (0.15 youngest → 0 by 25; Phase-6 boom/bust channel). Layer H (`rating/club_form.py`) unchanged:
+FBref Big-5 + TM appearances (objective minutes/goals/assists), league-tier weighted, club coverage
+64%. 4 debutants coded CPV/CUW/JOR/UZB, DR Congo→COD. Results: Yamal/Dembélé/Mbappé 97, Kane/Pedri
+96, Vitinha/Olise 95, Haaland 94, Vinícius 93, Bellingham 90, Messi 92, Ronaldo 87, Salah 82; Laimer
+dropped 98→81, Almoez Ali→55, Beiranvand→17. Scarcity: 3 at 97, 7 at 95+, 12 at 93+.
+
+Phase 3-fix-B (historical two-tier) — the mirror of the Laimer fix, on the HISTORICAL side. Drafting
+2022 Argentina showed too many near-perfect cards (Messi 98, E. Martínez 98, Álvarez 96, Enzo 94);
+auditing found the historical path minted 170 cards at 98+ because the rating was driven by hot
+two-week WORLD-CUP performance (Layer P) spread linearly across 1–99, while awards (Layer G) only
+acted as a weak floor. Replaced with a **three-signal MAX** in `pipeline/rating/combine.py`:
+`wc_rating = max(awards_anchor, honor_floor, capped_performance)`.
+- **Awards anchor (override)** — `pipeline/rating/stature_anchor.py`, the historical analogue of
+  `consensus_2026.py`. Best Ballon d'Or rank (POTY/France-Football retro = rank 1) in a **±2-year
+  window** sets a scarce 80–99 curve; **distinct win-years in a ±6 window** is the dominance signal
+  that reaches 99 (serial winner). No age factor (awards price age). The ±2 window is what makes the
+  user's example work: 2018±2 catches Ronaldo (2016/17 BdO) AND Messi (2019 BdO) → both 99. Players
+  with no award standing return None and fall through. Supersedes the old Layer-G floor (g_label kept
+  for display).
+- **WC-honor floor** — a player who EARNED a tournament honor (component B: Golden Ball 1.0 → 95,
+  Golden Boot/Glove .90 → 92, Silver Ball .75 → 90, Silver Boot/Best-Young-Player .70 → 88, Bronze
+  .55 → 86) gets a real floor (tops at 95). Driven by the HONOR (recognition), not raw goals — so a
+  variance two-goal striker on a strong team is NOT lifted. This is the user's Zidane-2006 refinement
+  (Golden Ball → 95 despite a past-peak award standing).
+- **Capped WC-performance** — the Layer-P composite × age factor, normalized within position, then
+  CAPPED: ≤79 where the player had a real **award opportunity** (so non-listed role-players settle
+  "very good"), ≤95 in **award-less profiles** (`year<1956` OR `year<1995 and team not in UEFA` — the
+  Euro-only Ballon d'Or era) so early-era greats still reach the elite band. `UEFA` set + `_perf_cap`
+  + `_honor_floor` live in combine.py.
+Results: historical 98+ collapsed 170→46 (99: 30), ~2–4 per tournament and all genuine greats
+(1990 Maradona/van Basten/Gullit/Matthäus; 2018 Messi/Ronaldo/Lewandowski/Modrić). 2022 Argentina now
+reads Messi 99 / E. Martínez 92 (Golden Glove) / Álvarez+Lautaro 89 / Enzo 88 (Best Young Player) /
+supporting cast 79. Pre-1956 standout reaches 97 (award-less reach). Sanity: Maradona 1986 = 99 (age-
+decline to 84 by 1994), Zidane 2006 = 95, Salah 92. All targets pass; **2026 cohort UNCHANGED**
+(separate path). atk/def already derive from final `wc_rating`, so a quiet-tournament 99 plays like a
+99 (the plan's Phase-6 engine note is moot). Tuning lives in `stature_anchor.py` (windows, curve) and
+`combine.py` (caps, honor floors, UEFA set); each card carries a `tier` field (anchor/honor/perf/2026)
+for debug.
 
 Phase 4 (position engine): `app/src/positions/` — 14-token taxonomy (`taxonomy.js`:
 GK; CB/LB/RB/LWB/RWB; CDM/CM/CAM/LM/RM; LW/RW/ST, each with line+zone+depth), formations-as-data
@@ -74,7 +114,214 @@ scaled by zone/depth, floored at `OFF_POS_FLOOR=0.88` (one tunable, zero-able). 
 `SUB_TO_TOKEN`: 726 cards carry a granular token, and **73 cross-line versatile players** (Kimmich
 DF+CDM, Maeda MF+LW, Almirón MF+RW) get a multi-line array — granular ADDS a line, never replaces the
 rated bucket (rating was normalized within bucket). Historical cards stay bucket-only (0 granular).
-Verify: `node app/src/positions/verify.mjs` (24/24 pass). Next: Phase 5 (draft UX).
+Verify: `node app/src/positions/verify.mjs` (24/24 pass).
+
+Phase 5 (draft UX): the app is now a real multi-screen game. `src/theme.js` holds shared design
+tokens (C palette, FONTS, splash) — extracted to break an app.jsx↔screens import cycle that blanked
+the page; every screen imports from theme.js, never from app.jsx. `src/app.jsx` is the router
+(title→draft→result) behind the dataReady gate. Screens: `Title.jsx` (3 eras × 2 modes + PLAY),
+`Draft.jsx` (the loop: reel → green/yellow/grey offer → tap → pick-the-spot on the board → place →
+auto-spin → 11/11 → RUN IT to the Result stub), `Result.jsx` (Phase-5 stub: XI by line + nation
+count + "engine arrives in Phase 6"). Pure logic in `src/formation/` (`offer.js`: offerState,
+seat with user pins, validSpots, openLines; `tighten.js`: reasonString) and `src/spin/`
+(`pools.js` era/validTargets, `reel.js` tumble). `positions/formations.js` slots gained {x,y} pitch
+coords (LINE_Y bands). Board is responsive: desktop (≥760px) = absolute-positioned PitchBoard at
+formation coords; narrow = line-grouped rows (LineBoard). Classic shows stats + effectiveness %;
+Diehard shows name+position only. 2026 era is team-only (no year box); Modern/All-Time draw year+team.
+Verify: `node app/src/draft/verify.mjs` (17/17). **Plumbing fix:** `public/sw.js` was cache-first on
+the stable-named `bundle.js`, pinning stale builds forever (162-0 hashes its bundle; we don't) —
+switched to network-first w/ cache fallback, CACHE bumped tf-v1→tf-v2.
+
+Phase 5b (draft UX refinements, post-Phase-5 user feedback): four fixes.
+(1) **Separate country/year respins** — one RESPIN used to reroll both axes; now `respins` is
+`{team:3, year:3}` independent counts. `spin/reel.js` takes `axes:{team,year}` (a locked axis holds
+the target value instead of tumbling, 162-0's fixFr/fixDec pattern); `spin/pools.js` `validTargets`
+gained a `fix` arg (`{teamCode}` holds country / `{year}` holds year) + `canRespin(...,current)`
+(true only if an OTHER squad exists) to disable a dead axis. Draft shows two buttons RESPIN COUNTRY /
+RESPIN YEAR with live counts; 2026 era (no year axis) shows only country. Verified live: year-respin
+held Argentina & swapped 1994→1962 (YEAR 3→2, COUNTRY stayed 3); country-respin held 1962 & swapped
+Argentina→Ghana (COUNTRY 3→2, YEAR stayed 2); 2026 = country-only.
+(2) **Flags** (pulled forward from Phase 10) — bundled flag-icons SVGs served at `/flags/<TEAM_CODE>.svg`
+(named by team_code, so runtime needs NO map/dep). `data/flags.js` `FLAG_KEY` (88 codes→flag-icons
+keys: ENG→gb-eng/SCO→gb-sct/WAL→gb-wls/NIR→gb-nir, DEU→de, CSK→cz) drives `scripts/build_flags.mjs`
+(`npm run flags`, flag-icons is a devDependency); 4 defunct nations (SUN/DDR/YUG/SCG) are hand-authored
+SVGs in `public/flags/`. `components/Flag.jsx` = `<img>` w/ onError→text-code fallback, used on offer
+cards, board chips, reel box, offer header, placing banner. 88 SVGs in dist; `build.js` already copies.
+(3) **Placing banner + auto-scroll** — tapping an offered player now shows a "PLACING [flag] Name · POS"
+banner on the board (overlay on PitchBoard, inline on LineBoard) so you see WHO, not just where;
+`util/scroll.js` ports 162-0's `smoothScrollToEl` (easeInOutQuad) — board scrolls into view on tap,
+offer scrolls into view on the post-place auto-spin.
+(4) **Pitch markings fixed** — PitchBoard now a conventional single-team lineup: halfway line +
+center circle at the TOP (the attacking edge, by the forwards), penalty box + 6-yard box + penalty
+arc (the "D") at the BOTTOM around the keeper. LineBoard (narrow) has no markings by design.
+Verify: `node app/src/draft/verify.mjs` (30/30 — added fixed-axis validTargets/canRespin asserts) +
+`node app/src/positions/verify.mjs` (24/24); all four items confirmed in live desktop preview.
+
+Phase 5c (formation row layout fix): formations are now drawn with rows following the formation
+NAME, not the GK/DF/MF/FW taxonomy line — so a "4-2-3-1" reads as FOUR outfield bands (4 def / 2
+holding / 3 attacking / 1 forward) the way soccer formations are conventionally shown, even though
+the holding (CDM) and attacking (CAM/RM/LM) bands are both "MF" in our taxonomy. `positions/
+formations.js` `makeFormation` parses the name's digit groups and assigns each slot's pitch `y` by
+band (the token arrays are written defense->attack so digit groups consume slots in order); slot
+`line`/`id` (eligibility) are unchanged. Both boards updated to read bands: `Draft.jsx` PitchBoard
+already used slot.x/y; LineBoard (narrow) now groups rows by distinct slot.y (attack top -> GK
+bottom) instead of by taxonomy line. Also flipped left/right: token arrays are written right->left
+within each band (RB, CB, CB, LB), so `makeFormation` maps the first slot of a band to high x
+(`x = (size - k)/(size + 1)`) — right side renders on the right, left on the left, as conventionally
+drawn. Confirmed in preview at desktop (1100px) and narrow (600px).
+
+Phase 6 (match engine + calibration): "RUN IT" now plays a real simulated World Cup. The engine is
+in `app/src/engine/`: `params.js` (all tuning constants in one place), `poisson.js` (Dixon-Coles
+double-Poisson — `poissonPmf`, `scoreMatrix` with the τ low-score correction, `sampleScore`),
+`squad.js` (aggregate an XI to attack/defense as the POS_MULT-weighted MEAN of card atk/def ×
+canPlay effectiveness; `bestXI` for opponents), `match.js` (`playMatch` with ET + penalties for
+knockout ties), `bracket.js` (Elo-seeded opponent draw + group + knockout, returns the result
+object), `index.js` (`runTournament(seating, formationName, era)` public surface).
+**Goal model:** per side `λ = BASE_GOALS × exp(STEEP × ((att−MEAN_ATK) − (oppDef−MEAN_DEF)))`,
+clamped to LAMBDA_CLAMP, then a Dixon-Coles score matrix sampled. The **centering** against cohort
+means (MEAN_ATK=0.66, MEAN_DEF=0.60) is essential — quality is a mean in ~[0.4,0.97], not centered
+at 0, so without subtracting the means the exp() explodes goal counts. **Elo feeds opponent SEEDING
+only** (later rounds draw from progressively higher Elo tiers via ELO_BANDS), never the goal model.
+**Calibrated constants** (baked as defaults, env-overridable for sweeps via `CAL_STEEP`/`CAL_BASE`/
+`CAL_LMAX`...): STEEP=6.3, BASE_GOALS=0.90, LAMBDA_CLAMP=[0.04, 3.3], RHO=−0.05. The λ-upper-clamp
+is the lever that caps blowout scorelines without changing WHO wins (decouples goal level from the
+win curve). **Calibration results** (all spec §8 targets land): near-perfect dream-team wins the
+tournament ~69%, a typical engaged draft ~12%, goals/match ≈2.7, upsets frequent. Calibration is
+grounded in reality via `calibrate.mjs`, which simulates actual drafts (engaged draft ≈ attack
+0.82/def 0.73; careless ≈ 0.50/0.49; dream team ≈ 0.96) rather than arbitrary percentiles.
+**Phase 6b — real 2026 World Cup format:** 12 groups of 4 (48 teams); top 2 of each group (24) PLUS
+the 8 best third-place teams = 32 advance → Round of 32 → R16 → QF → SF → Final (5 KO rounds). The
+third-place cut is set by simulating ALL 12 groups (cheap) and comparing your 3rd-place record
+(pts→gd→gf) against the field's other thirds, so a stronger 3rd-place showing is genuinely more
+likely to go through. The 11 other groups draw opponents freely (reuse across the field allowed, deduped
+only within each group) so YOUR `used` set stays duplicate-free and small pools (2026 = exactly 48
+squads) can't be exhausted. A small-pool guard scales groups/thirds-quota when a pool can't fill 12.
+Tiers: Group Stage Exit / Round of 32 / Round of 16 / Quarterfinalists / Semifinalists / Runner-Up /
+Champions. Tooling: `node app/src/engine/verify.mjs` (16/16 — pmf sums, matrix normalized, τ lifts low
+scores, dominant beats weak but upsets happen, bracket always completes with a valid tier, KO reaches
+5 rounds starting at Round of 32, a 3rd-place finish can advance via best-thirds) and `node
+app/src/engine/calibrate.mjs` (prints the calibration table). Wired in-app: `Draft.jsx` onComplete
+hands `{seating, formationName}` to `app.jsx`, which calls `runTournament` and renders `Result.jsx`
+(full rewrite from the Phase-5 stub) — real bracket: tier headline, era/mode/nations line, goal
+differential line, group + knockout rows with flags and color-coded scorelines (green win / red
+loss / chalk draw) + "on pens"/"after extra time" notes. Smoke-tested live (All-Time · Classic):
+completed an 11-player draft → RUN IT → Result rendered a real bracket (Round of 16 tier, group L/W/W
+then a R16 penalty loss) with no console errors. New i18n keys: result.groupStage/knockout/byPenalties/
+afterExtraTime/scored/conceded/differential.
+
+Phase 7 (scoring: Elo + letter grade): every game now yields a per-game **Elo** (the leaderboard
+chase number, Phase 9's sort key) and, for Champions only, a letter **grade** (S+/S/A/B). Logic in
+`app/src/scoring/`: `params.js` (all Elo + grade constants in one place, env-overridable via `SC_*`),
+`score.js` (`matchDelta`, `scoreTournament(result)` → `{elo, eloDelta, grade}`, `grade`),
+`verify.mjs` (11/11), `calibrate.mjs` (per-tier Elo distribution + champion-distribution grade bands
++ anti-farm check). **Elo model:** start every game at START_ELO=1500 (per-game, NOT persistent);
+`finalElo = 1500 + Σ(per-match deltas)`. Each match delta = result × opponent-strength × diminishing-
+margin, where opponent strength `s` = the opponent's **national-team Elo percentile** (0..1) in the
+era's field — `bracket.js` now attaches `strength` to every `opponentPool` entry and stamps
+`oppStrength` on each group + knockout match record. Win = `K_WIN·(OPP_BASE+OPP_SPAN·s)·(WIN_BASE+
+(1−WIN_BASE)·dim(m))`; draw = `K_DRAW·(s−0.5)·2`; loss = `−K_LOSS·(LOSS_BASE+LOSS_SPAN·(1−s))·
+(LOSS_FLOOR+(1−LOSS_FLOOR)·dim(m))`; `dim(m)=1−exp(−(m−1)/MARGIN_TAU)` saturates the margin so
+blowout-farming a weak side can't beat a tight win over a great one (anti-farm: a 2-0 vs a top side
+out-scores an 8-0 vs a minnow — verified). **Calibrated constants** (baked defaults): K_WIN=38,
+K_LOSS=32, K_DRAW=10, OPP_BASE=0.55, OPP_SPAN=0.9, WIN_BASE=0.6, MARGIN_TAU=2.2, LOSS_BASE=0.5,
+LOSS_SPAN=0.8, LOSS_FLOOR=0.5. **Results** (mean finalElo, tiers strictly ordered): near-perfect
+champion ≈1740 (matches spec §7's "Elo 1740 / S+" example), median champion ≈1698, runner-up
+≈1654–1694, QF low-1600s, group exit ≤1481. **Grade bands** (from the champion finalElo distribution):
+S+ ≥1735, S ≥1700, A ≥1665, else B; non-champions grade null. Wired via `index.js` (merges
+`scoreTournament(result)` into the `runTournament` return). `Result.jsx` shows an **Elo line**
+(`Elo {elo}` + green/red delta) and a Champions-only **grade badge** (gold-bordered letter by the
+tier headline). Smoke-tested live: a 2026·Classic draft → RUN IT → Result showed "Elo 1573 +73"
+on a Round-of-16 finish (no badge, correct for non-champions); the Champions grade path verified in
+node (Brazil 1994 → Champions, Elo 1733 grade S / 1763 grade S+). Engine verify still 16/16.
+
+Phase 8 (polished result screen + shareable image): the Result screen now shows **your drafted XI on a
+pitch** (between the header and the scorelines) plus a **SHARE** button; a generated PNG result card is
+offered via the proven 162-0 share chain. New `app/src/components/SquadPitch.jsx` — a read-only pitch
+(desktop = absolute chips at formation `slot.{x,y}` with the same markings as the draft board; narrow
+<760px = line-grouped rows), props `{seating, formationName, diehard}`, ratings shown only in Classic.
+`app/src/util/name.js` — `lastName()` extracted from Draft.jsx (now imported by both Draft + SquadPitch).
+`app/src/engine/index.js` now puts `formationName` on the returned result so the screen/card can lay out
+the pitch. **Share card** (`app/src/share/shareImage.js`, `generateShareImage({result,seating,
+formationName,config})→Promise<Blob>`): adapts 162-0's canvas technique (await `document.fonts.ready`,
+`S=2` retina, `drawPill`, `toBlob`). Layout top→bottom: TOTAL FOOTBALL header → **mode pill**
+(CLASSIC/EXPERT) → tier ("where you made it") → Champions-only **grade badge** → Elo (+delta) + goal
+differential → **mini pitch** of the XI (each chip = flag + last name + position token, **NO ratings**,
+per the user) → footer. Flags preloaded from `/flags/{code}.svg` into a Map (onerror→text-code fallback),
+gated by a `FLAGS_ON_CARD` const. Intentionally **no scorelines on the card** (they stay on the screen).
+`app/src/share/Share.jsx` — overlay that builds the blob on open and offers native-share (with image,
+gated by `navigator.canShare({files})`) → copy-image (clipboard.write ClipboardItem → falls back to
+download) → save (download `<a>`) → text social links (X/Facebook/Bluesky/WhatsApp/Telegram/Reddit/
+Messages). `SHARE_URL` is an empty placeholder (no domain yet; links degrade gracefully). **"Diehard"
+renamed to "Expert"** — display label only (en.json `mode.diehard`/`.desc`); the internal config key
+stays `diehard` to avoid rippling through pools/draft/engine. New i18n: `share.*` keys. Smoke-tested
+live (2026·Classic): completed a draft → RUN IT → Result showed the XI on the pitch + group/knockout
+scorelines + Elo; SHARE generated a 1040×1760 PNG card with the mode pill, tier, Elo, differential, and
+11 flag+name+position chips and no ratings; verified both the desktop pitch and the narrow line-row
+fallback. Engine verify 16/16, scoring verify 11/11. NOTE: the user has DEFERRED selection-page UI/UX
+touch-ups to after the whole product is built.
+
+Phase 9 (Supabase daily leaderboard, sorted by Elo): every completed run can be POSTED to a shared
+board and browsed by era × mode × timeframe (today/week/all-time), sorted by Elo — the 162-0
+leaderboard pattern ported (plain `fetch`, no JS client dep). **Backend** (`SUPABASE.sql`, repo root —
+the user runs it in a NEW Supabase project): a `scores` table (config, name, elo, tier, grade,
+goals_for/against/diff, squad jsonb, client_key, created_at), RLS with anon SELECT-only, a unique index
+on `client_key` (idempotency), and two `SECURITY DEFINER` RPCs — `submit_score(...)` (the only write
+path; trims/clamps name to 24, defaults "Anon", `INSERT ... ON CONFLICT (client_key) DO NOTHING`) and
+`real_pct(p_config, p_elo)` (returns the "top X%" int, null until a config has ≥18 scores — the
+real-only switchover; the modeled baseline is deferred). **Client** (`app/src/leaderboard/board.js`):
+`SB_URL`/`SB_KEY` placeholder consts (user pastes Project URL + publishable anon key — same posture as
+162-0, no other secrets), `boardConfigured()`, `configKey(era,mode)=`${era}-${mode}``, `packSquad`
+(compact `{formationName, players:{[slotId]:{name,team_code,year,wc_rating}}}` for the viewer), and
+`submitScore`/`topScores`/`realPct` (POST `rpc/submit_score`, GET `scores?...&order=elo.desc,
+created_at.asc&limit=25` + `created_at=gte.` for today/week, POST `rpc/real_pct`). **Screens:**
+`Leaderboard.jsx` (era×mode×timeframe tab rows, ranked rows, tap a row → overlay rendering the stored
+squad via the read-only `SquadPitch`, ratings hidden in diehard); `Title.jsx` + `Result.jsx` gained a
+LEADERBOARD entry; `Result.jsx` gained a **PostBlock** (name input + POST, session-guarded by
+`gamePosted` lifted to `app.jsx`, shows "Top X%" only when `realPct` is non-null, three states:
+not-configured / posted / input). `app.jsx` mints a per-run `clientKey` (crypto.randomUUID) and routes
+title⇄leaderboard⇄result. New i18n `leaderboard.*` keys. **Smoke-tested live** (board NOT yet
+configured): LEADERBOARD button on Title; the Leaderboard screen renders all tab rows + the graceful
+"Could not reach the leaderboard" state; a completed 2026·Classic run (Semifinalists, Elo 1627 +127)
+showed the PostBlock in its "Leaderboard coming soon." not-configured state with no errors. **Handoff
+pending:** the user must create the Supabase project, run `SUPABASE.sql`, and paste URL + key into
+`board.js` before a live round-trip is possible (account action I can't do). Next: Phase 10 (i18n fill +
+flags) / Phase 11 (Capacitor/iOS).
+
+Phase 10 (i18n fill — 5 languages + full country-name localization + switcher): the game now ships in
+all six declared locales (en/es/fr/pt/de/it). Flags were already 100% done in Phase 5b, so this phase was
+languages only. **i18n hub** (`app/src/i18n/index.js`) gained: `teamName(code)` (fallback chain
+`strings["team."+code] || GAME.teams[code]?.name || code` — a locale missing a country falls back to the
+English `teams.json` name, never a raw key); `tierName(tier)`/`roundName(round)` (map the engine's raw
+English tier/round strings via `TIER_KEY`/`ROUND_KEY` to i18n keys, raw-string fallback); `detectLocale()`
+(first 2 chars of `navigator.language` matched to LOCALES, else "en"); `storedLocale()`/`setStoredLocale()`
+(`localStorage` key `tf-locale`, try/catch for privacy mode). **Boot + switching** (`app.jsx`): boots from
+`storedLocale() || detectLocale()`, `Promise.all([loadLocale(initial), loadGameData()])`; a root `lang`
+state + `onSetLang(loc)` (loadLocale → setStoredLocale → setLang) re-renders the tree on switch (needed
+because `t()` reads a module global). **Switcher UI** (`Title.jsx`): a row of six endonym chips (English ·
+Español · Français · Português · Deutsch · Italiano), active = gold; lives on Title only (pick language
+before playing — sufficient). **Render sites routed through i18n:** `spin/pools.js` builds pool entries
+with `name: teamName(teamCode)` (reel tumble frames + offer header localize for free); `Result.jsx` uses
+`tierName`/`roundName`/`teamName` for the headline, knockout round labels, and opponent names;
+`share/shareImage.js` localizes the canvas (tier via `tierName().toUpperCase()`, mode pill via
+`t("mode."+...)`, subtitle/ELO/diff/footer via `share.card*` keys); `share/Share.jsx` localizes the
+social-share sentence via a templated `share.text` key (`{tier}`/`{mode}`/`{elo}` vars, tier via
+`tierName`) — this was a gap caught in verification (it had been hardcoded English) and fixed.
+**Content:** `en.json` stays the canonical key set (88 keys incl. new `label.era`/`label.mode`,
+`draft.placedCount`, `round.*`, `share.text`; English country names come from `teams.json`, not duplicated
+into en.json). The five new locale files (`es/fr/pt/de/it.json`) each carry all en.json keys translated
+**plus** an 88-entry `team.<CODE>` block of localized country names (incl. defunct SUN/DDR/CSK/YUG/SCG/
+IDN/Zaire and the home nations); `app.title` stays "Total Football" (brand) everywhere. Translations are
+model-authored (natural football terminology) — **a native-speaker review before public launch is the
+recommended follow-up** (flagged to the user). `build.js` already copies `i18n/`, so no build change.
+**Verified live** (Italian, 2026·Classic): switcher re-localizes UI chrome + era/mode cards + tagline +
+draft chrome + country names + positions; localStorage persists across reload; auto-detect logic confirmed
+(sandbox reports en-US, so verified via the function + stored path); Result screen showed a localized tier
+headline ("Quarti di finale"), round labels ("Sedicesimi/Ottavi/Quarti"), opponent names ("Egitto/Costa
+d'Avorio/Svezia/Turchia/Germania"), and "ai rigori"; the SHARE card rendered the localized
+subtitle/mode-pill ("CLASSICA")/tier/Elo/differential/tagline with accented glyphs, and the social-share
+sentence is now fully Italian with no English leak. `npm run build` clean; all 4 node verify suites still
+pass (positions 24/24, draft 30/30, engine 16/16, scoring 11/11). Out of scope (later): native-speaker
+translation review; an in-Draft/Result switcher (Title-only is enough now). Next: Phase 11 (Capacitor/iOS).
 
 ## Working norms (user is non-technical)
 - Explain *why*, not just *what*; flag tradeoffs. Never commit/push without explicit instruction.

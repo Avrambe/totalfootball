@@ -1,19 +1,31 @@
-"""Phase 3 — the 2026 World Cup cohort, rated from a current-form proxy. Spec §5.
+"""Phase 3 — the 2026 World Cup cohort, rated by a TWO-TIER system. Spec §5, plan addendum.
 
 The 2026 squads are NOT in the Fjelstul spine (it ends 2022) and these players have no 2026 WC
 stats (the tournament hasn't happened), so they can't go through the historical Layer A–F path.
-Instead each 2026 card blends only what exists:
+The 2026 rating therefore has two tiers:
 
-    composite = blend({H: club_form, G: career_stature, base: 0.5}, w={H:.60, G:.25, base:.15})
-    raw       = composite × age_factor          (Layer 0)
-    wc_rating = max( percentile(raw within 2026 position pool) -> 1..99,  G floor )
+  1. CONSENSUS tier (the elite) — anchored to merged industry "best players entering 2026"
+     rankings (consensus_2026.py). A matched player's rating is taken DIRECTLY from the
+     rank→rating curve (ceiling 97; no age factor — the lists already price age). The top should
+     reflect cross-publication consensus, not our own proxy stats (which minted role-players at 98).
 
-H (club form) is real Transfermarkt/FBref season output; G (career stature) keys by year±2 so the
-2024/25 Ballon d'Or & POTY finishers floor the current stars automatically. Normalization is a
-SEPARATE within-position pool for 2026 (not pooled with history): the recipes differ, national
-strength enters the engine via Elo not the player score, and the bar here is explicitly "good
-enough" (see plan). Returns cards in the shape build_cards.build() emits (minus atk/def, which
-build_cards computes uniformly for both cohorts).
+  2. COMPOSITE tier (everyone else, ~1,100 players) — a de-inflated proxy:
+         composite = blend({H: club_form, M: age_corrected_market_value, G: stature, base: 0.5},
+                           w={H:.45, M:.30, G:.15, base:.10})
+         raw       = composite × age_factor                       (Layer 0)
+     then percentile-ranked within position and QUANTILE-MATCHED to the pooled HISTORICAL
+     per-position rating distribution (below the consensus floor) for real cross-era comparability,
+     and finally CAPPED at CONSENSUS_FLOOR−1 so no non-listed player can outrank a listed one.
+
+Key changes from the first 2026 pass (which over-rated weak-league veterans, e.g. Laimer 98):
+  - International caps REMOVED entirely — caps measure national-team volume, not skill.
+  - Market value ADDED as a broad component, but AGE-CORRECTED first (`_age_premium`): MV
+    over-prices youth (resale potential) and under-prices age, so we divide that bias out to get a
+    current-skill proxy. This rescues good players in mediocre/uncovered leagues (Mané, Mahrez…).
+  - The raw-MV youth FLOOR is gone (consensus + age-corrected M handle youth properly); the
+    `volatility` tag is KEPT (the Phase-6 engine's young-player boom/bust channel).
+
+Returns cards in the shape build_cards.build() emits (minus atk/def, computed uniformly downstream).
 """
 from __future__ import annotations
 import csv
@@ -21,56 +33,33 @@ import json
 import math
 import re
 import sys
+from statistics import median
 
 try:
     from .._shared import RAW, norm_name, percentile_ranks, to_1_99
     from ..normalize import age_at
-    from . import club_form, career_stature, age_curve, combine
+    from . import club_form, career_stature, age_curve, combine, consensus_2026
+    from .consensus_2026 import CONSENSUS_FLOOR
 except ImportError:
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
     from _shared import RAW, norm_name, percentile_ranks, to_1_99
     from normalize import age_at
-    from rating import club_form, career_stature, age_curve, combine
+    from rating import club_form, career_stature, age_curve, combine, consensus_2026
+    from rating.consensus_2026 import CONSENSUS_FLOOR
 
 YEAR = 2026
 POSITIONS = ("GK", "DF", "MF", "FW")
-# Composite weights. H = club form/strength, G = career stature, I = international standing
-# (full coverage; goal-weighted so it rewards attackers and proven names), base = neutral prior.
-WEIGHTS = {"H": 0.45, "G": 0.20, "I": 0.20, "base": 0.15}
+# Composite weights for the NON-consensus tier. H = club form, M = age-corrected market value,
+# G = career stature, base = neutral prior. (Caps/international-standing removed — they rewarded
+# volume, not skill, and inflated weak-league veterans.)
+WEIGHTS = {"H": 0.45, "M": 0.30, "G": 0.15, "base": 0.10}
 
-# International-standing shape: (experience weight, goals weight, goals cap) per position.
-INTL = {"FW": (0.40, 0.60, 40), "MF": (0.60, 0.40, 22),
-        "DF": (0.85, 0.15, 10), "GK": (1.00, 0.00, 1)}
-CAPS_FULL = 90.0           # caps that map experience -> 1.0
-
-
-def _intl_standing(caps, goals, pos: str) -> float:
-    """Proven-international quality 0..1 from caps + international goals (squad data; 100% coverage)."""
-    try:
-        caps, goals = int(caps or 0), int(goals or 0)
-    except (ValueError, TypeError):
-        return 0.0
-    w_exp, w_goal, gcap = INTL[pos]
-    experience = min(caps / CAPS_FULL, 1.0)
-    goals_norm = min(goals / gcap, 1.0)
-    return w_exp * experience + w_goal * goals_norm
-
-
-# --- Young-player floor (Spec §5, refinement) -----------------------------------------------
-# Our caps/stature signals reward accumulated career — which teenagers haven't had time to build,
-# so phenoms (Yamal, Cubarsí) read low. Transfermarkt MARKET VALUE is the one signal that's
-# explicitly forward-looking: it prices a player's expected trajectory, the very "youth premium"
-# that made it unusable for the general pool. So we use it ONLY for the young, blended with their
-# most-recent club form, as a FLOOR that lifts but never lowers. The weight fades to zero by prime
-# age (no youth bias leaks into established players), and a conservative shrink errs ~45th pct — we
-# would rather a young star overperform in-sim than be over-rated up front. Paired with `volatility`
-# (a boom-or-bust tag the Phase 6 match engine widens their per-game output with).
-YOUTH_FULL_AGE = 19        # full youth signal at/below this age
-YOUTH_ZERO_AGE = 25        # youth signal (and volatility) fade to zero at/above this age
-MV_MAX_WEIGHT = 0.40       # market value's share of the consensus floor, at the youngest age
-CONSERVATIVE = 0.78        # shrink on the consensus floor — the "err ~45th pct" dial
-MV_LOG_LOW = 6.0           # €1M  market value -> 0.0
-MV_LOG_HIGH = 8.18         # ~€150M market value -> 1.0
+# --- Young-player volatility tag (Spec §5) --------------------------------------------------
+# The rating itself is a clean point estimate; the per-match boom/bust for young players lives in
+# this `volatility` tag, which the Phase-6 engine widens their output with. (The old raw-MV youth
+# rating FLOOR is removed — consensus + age-corrected M now place youth on the proper scale.)
+YOUTH_FULL_AGE = 19        # full volatility at/below this age
+YOUTH_ZERO_AGE = 25        # volatility fades to zero at/above this age
 YOUTH_VOL = 0.15           # max per-card volatility tag (at the youngest age)
 
 
@@ -83,14 +72,7 @@ def _youth_weight(age: int | None) -> float:
     return (YOUTH_ZERO_AGE - age) / (YOUTH_ZERO_AGE - YOUTH_FULL_AGE)
 
 
-def _mv_norm(mv: int | None) -> float | None:
-    """Log-scale a market value (EUR) onto 0..1; None when absent (floor simply doesn't apply)."""
-    if not mv or mv <= 0:
-        return None
-    frac = (math.log10(mv) - MV_LOG_LOW) / (MV_LOG_HIGH - MV_LOG_LOW)
-    return max(0.0, min(1.0, frac))
-
-
+# --- Market value: load + age-correction --------------------------------------------------------
 def _load_market_values() -> dict:
     """norm_name -> list of (birth_year|None, market_value_eur). From Transfermarkt players.csv."""
     out: dict[str, list] = {}
@@ -118,6 +100,64 @@ def _market_value(mv_index: dict, name: str, birth_date: str) -> int | None:
         if same:
             return max(same)
     return max(v for _, v in recs)
+
+
+def _build_age_premium(cards: list[dict]):
+    """A function age -> premium = (cohort median MV at that age) / (cohort overall median MV).
+
+    Market value peaks young (resale-potential premium) and collapses with age, so dividing a
+    player's MV by this premium removes the age bias and leaves a current-skill proxy. Built from
+    the cohort's OWN MV-by-age medians (smoothed over a ±1yr window, clamped) so it's self-calibrating.
+    """
+    by_age: dict[int, list[int]] = {}
+    for c in cards:
+        if c["mv"] and c["age"]:
+            by_age.setdefault(c["age"], []).append(c["mv"])
+    all_mv = [c["mv"] for c in cards if c["mv"]]
+    overall = median(all_mv) if all_mv else 1.0
+    med_by_age = {a: median(v) for a, v in by_age.items()}
+
+    def premium(age: int | None) -> float:
+        if age is None:
+            return 1.0
+        vals = [med_by_age[a] for a in (age - 1, age, age + 1)
+                if a in med_by_age and len(by_age[a]) >= 3]
+        if not vals:
+            return 1.0
+        return max(0.2, min(4.0, (sum(vals) / len(vals)) / overall))
+
+    return premium
+
+
+def _fit_log_bounds(values: list[float]) -> tuple[float, float]:
+    """Log10 bounds (10th, 95th pct) for mapping age-adjusted MV -> 0..1; data-fit, not hand-tuned."""
+    logs = sorted(math.log10(v) for v in values if v > 0)
+    if not logs:
+        return 6.0, 8.0
+    lo = logs[int(0.10 * (len(logs) - 1))]
+    hi = logs[int(0.95 * (len(logs) - 1))]
+    return (lo, hi + 1.0) if hi <= lo else (lo, hi)
+
+
+def _mv_norm(mv: float | None, low: float, high: float) -> float | None:
+    """Log-scale a (age-adjusted) market value onto 0..1; None when absent."""
+    if not mv or mv <= 0:
+        return None
+    return max(0.0, min(1.0, (math.log10(mv) - low) / (high - low)))
+
+
+def _calibrate(pct: float, pos: str, hist_by_pos: dict | None) -> int:
+    """Quantile-match a composite percentile to the pooled HISTORICAL per-position distribution,
+    using only historical ratings BELOW the consensus floor as the reference (so the composite tier
+    spreads across the realistic mid/low band instead of clustering at the cap). Falls back to a
+    plain 1–99 map when no historical reference is supplied (standalone smoke test)."""
+    if not hist_by_pos or pos not in hist_by_pos:
+        return to_1_99(pct)
+    ref = sorted(r for r in hist_by_pos[pos] if r < CONSENSUS_FLOOR)
+    if not ref:
+        return to_1_99(pct)
+    return ref[int(round(pct * (len(ref) - 1)))]
+
 
 # Squad team names that are not in the Fjelstul spine. DR Congo == Zaire's COD; the four debutants
 # get their ISO-3 codes.
@@ -168,14 +208,18 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", norm_name(name)).strip("-")
 
 
-def build_cards() -> list[dict]:
+def build_cards(hist_by_pos: dict | None = None) -> list[dict]:
+    """Build the 2026 cohort cards. `hist_by_pos` = {position: [historical wc_rating, …]} from the
+    already-built historical cards, used to calibrate the composite tier onto the historical scale;
+    when omitted (standalone run) the composite tier falls back to a plain 1–99 map."""
     squads = json.loads((RAW / "squads_2026" / "squads_2026.json").read_text(encoding="utf-8"))
     name2code = _team_name_to_code()
     club_idx = club_form.build_index()
     g_index = career_stature.build_index()
     mv_index = _load_market_values()
 
-    cards = []
+    # First pass: gather the raw per-card signals.
+    raw = []
     for team in squads:
         tname = team["team"]
         tcode = name2code.get(tname)
@@ -190,46 +234,70 @@ def build_cards() -> list[dict]:
             # selection): floors current legends even if their league has no game-level data.
             g_sub, g_floor, g_label = career_stature.best_finish(
                 g_index, {norm_name(name)}, YEAR, back=3, fwd=0)
-            # No stature -> drop G (don't let a 0.0 drag uncovered players below the 0.5 prior).
             g_blend = g_sub if g_label != "none" else None
-            intl = _intl_standing(p.get("caps"), p.get("goals"), pos)
-            composite = combine._blend(
-                {"H": h, "G": g_blend, "I": intl, "base": 0.5}, WEIGHTS)
-            raw = composite * age_curve.age_factor(age)
-            # Young-player floor: blend recent club form with market-value trajectory consensus,
-            # weighted toward youth, conservatively shrunk; lift `raw` but never lower it.
-            yw = _youth_weight(age)
-            if yw > 0:
-                mv = _mv_norm(_market_value(mv_index, name, bdate))
-                if mv is not None:
-                    mv_w = MV_MAX_WEIGHT * yw
-                    consensus = combine._blend({"H": h, "MV": mv}, {"H": 1 - mv_w, "MV": mv_w})
-                    raw = max(raw, CONSERVATIVE * consensus)
-            sub_pos = club_form.sub_position(club_idx, name, bdate)
-            cards.append({
-                "player_id": f"2026-{tcode or 'XXX'}-{_slug(name)}",
-                "name": name, "team_code": tcode, "team_name": tname, "year": YEAR,
-                "position": pos,
-                "eligible_positions": _eligible_positions(pos, sub_pos),
-                "sub_position": sub_pos,
-                "age": age, "g_label": g_label, "g_floor": g_floor,
-                "volatility": round(YOUTH_VOL * yw, 3),
-                "_raw": raw, "_has_club": h is not None,
+            raw.append({
+                "name": name, "team_code": tcode, "team_name": tname, "pos": pos,
+                "bdate": bdate, "age": age, "h": h, "g_blend": g_blend,
+                "g_floor": g_floor, "g_label": g_label,
+                "mv": _market_value(mv_index, name, bdate),
+                "sub_pos": club_form.sub_position(club_idx, name, bdate),
             })
 
-    # Separate within-position normalization for the 2026 pool, then apply the G floor.
+    # Age-correct market value, then fit the log bounds over the cohort's age-adjusted MVs.
+    age_premium = _build_age_premium(raw)
+    adj_mvs = [c["mv"] / age_premium(c["age"]) for c in raw if c["mv"]]
+    mv_low, mv_high = _fit_log_bounds(adj_mvs)
+
+    # Composite raw for every card (consensus cards keep it too; it's just unused for them).
+    for c in raw:
+        m = _mv_norm(c["mv"] / age_premium(c["age"]), mv_low, mv_high) if c["mv"] else None
+        composite = combine._blend(
+            {"H": c["h"], "M": m, "G": c["g_blend"], "base": 0.5}, WEIGHTS)
+        c["_raw"] = composite * age_curve.age_factor(c["age"])
+
+    # Consensus tier: merged industry rankings -> direct ratings for matched participants.
+    consensus, _order, _unmatched = consensus_2026.build_ratings([c["name"] for c in raw])
+
+    cards = []
+    for c in raw:
+        yw = _youth_weight(c["age"])
+        card = {
+            "player_id": f"2026-{c['team_code'] or 'XXX'}-{_slug(c['name'])}",
+            "name": c["name"], "team_code": c["team_code"], "team_name": c["team_name"],
+            "year": YEAR, "position": c["pos"],
+            "eligible_positions": _eligible_positions(c["pos"], c["sub_pos"]),
+            "sub_position": c["sub_pos"],
+            "age": c["age"], "g_label": c["g_label"],
+            "volatility": round(YOUTH_VOL * yw, 3),
+            "_raw": c["_raw"], "_g_floor": c["g_floor"], "_has_club": c["h"] is not None,
+        }
+        key = norm_name(c["name"])
+        if key in consensus:
+            card["wc_rating"] = consensus[key]      # direct, no age factor, skip normalization
+            card["_tier"] = "consensus"
+        else:
+            card["_tier"] = "composite"
+        cards.append(card)
+
+    # Composite-tier normalization: percentile within position -> calibrate to history -> cap.
     for pos in POSITIONS:
-        group = [c for c in cards if c["position"] == pos]
+        group = [c for c in cards if c["position"] == pos and c["_tier"] == "composite"]
         pct = percentile_ranks([c["_raw"] for c in group])
         for c, rp in zip(group, pct):
-            c["wc_rating"] = max(to_1_99(rp), c["g_floor"])
+            calibrated = _calibrate(rp, pos, hist_by_pos)
+            c["wc_rating"] = min(CONSENSUS_FLOOR - 1, max(calibrated, c["_g_floor"]))
 
     for c in cards:
-        del c["_raw"], c["g_floor"]
+        del c["_raw"], c["_g_floor"], c["_tier"]
     return cards
 
 
 if __name__ == "__main__":
     cs = build_cards()
     covered = sum(1 for c in cs if c["_has_club"]) if cs else 0
-    print(f"2026 cohort: {len(cs)} cards, club-covered {covered} ({covered/max(len(cs),1):.0%})")
+    con = sum(1 for c in cs if c["wc_rating"] >= CONSENSUS_FLOOR)
+    print(f"2026 cohort: {len(cs)} cards, club-covered {covered} "
+          f"({covered/max(len(cs),1):.0%}), consensus-tier {con}")
+    top = sorted(cs, key=lambda c: c["wc_rating"], reverse=True)[:20]
+    for c in top:
+        print(f"  {c['wc_rating']:>3}  {c['name']} ({c['team_code']})")

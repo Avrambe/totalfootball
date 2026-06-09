@@ -9,7 +9,7 @@ copyFileSync("./public/manifest.json", "./dist/manifest.json");
 copyFileSync("./public/sw.js", "./dist/sw.js");
 
 // Optional assets (icons / privacy) — copy only if present so the build never breaks early on
-for (const f of ["icon-192.png", "icon-512.png", "apple-touch-icon.png", "privacy.html"]) {
+for (const f of ["icon-192.png", "icon-512.png", "apple-touch-icon.png", "favicon.png", "og-image.png", "privacy.html"]) {
   if (existsSync(`./public/${f}`)) copyFileSync(`./public/${f}`, `./dist/${f}`);
 }
 

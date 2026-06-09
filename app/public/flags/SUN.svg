@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
+  <rect width="640" height="480" fill="#cd0000"/>
+  <g fill="#ffd700">
+    <!-- five-pointed star -->
+    <path d="M150 36 l14 43 h45 l-36 27 14 43 -37-27 -37 27 14-43 -36-27 h45 z"/>
+    <!-- sickle -->
+    <path d="M96 150 a64 64 0 0 0 104 50 a48 48 0 0 1 -84 -40 z"/>
+    <!-- hammer -->
+    <rect x="150" y="150" width="14" height="78" transform="rotate(40 157 189)"/>
+    <rect x="150" y="142" width="46" height="22" transform="rotate(40 173 153)"/>
+  </g>
+</svg>

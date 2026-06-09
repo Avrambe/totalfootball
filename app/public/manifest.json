@@ -1,7 +1,7 @@
 {
-  "name": "Total Football: World Cup Squad Builder",
+  "name": "Total Football: Build the Perfect Squad",
   "short_name": "Total Football",
-  "description": "Draft a World Cup squad from real players across the eras and run it through a simulated knockout tournament.",
+  "description": "Draft a dream squad of real players from across the eras and take on the world in a simulated knockout tournament.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a1f14",
