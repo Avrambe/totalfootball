@@ -3,10 +3,25 @@
 // (SUN/DDR/YUG/SCG) are hand-authored and already present — we skip (and verify) them here.
 // Run with: npm run flags   (requires `npm install` first to pull flag-icons).
 
-import { copyFileSync, existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { FLAG_KEY, CUSTOM_FLAGS } from "../src/data/flags.js";
+
+// flag-icons ships SVGs with only a viewBox and no width/height. Chrome infers the size from the
+// viewBox, but Safari/WebKit (and other strict browsers) treat the intrinsic size as 0 — combined
+// with object-fit they render a BLANK box, and canvas drawImage() draws nothing on the share card.
+// So we stamp explicit width/height (from the viewBox) onto the root <svg> when copying.
+function withDimensions(svg) {
+  const open = svg.match(/<svg[^>]*>/i);
+  if (!open) return svg;
+  const tag = open[0];
+  if (/\swidth=/i.test(tag) && /\sheight=/i.test(tag)) return svg; // already sized
+  const vb = tag.match(/viewBox="\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s*"/i);
+  if (!vb) return svg;
+  const sized = tag.replace(/<svg/i, `<svg width="${vb[1]}" height="${vb[2]}"`);
+  return svg.replace(tag, sized);
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = join(here, "..", "node_modules", "flag-icons", "flags", "4x3");
@@ -23,7 +38,7 @@ const missing = [];
 for (const [code, key] of Object.entries(FLAG_KEY)) {
   const from = join(SRC, `${key}.svg`);
   if (!existsSync(from)) { missing.push(`${code} -> ${key}`); continue; }
-  copyFileSync(from, join(OUT, `${code}.svg`));
+  writeFileSync(join(OUT, `${code}.svg`), withDimensions(readFileSync(from, "utf8")));
   copied += 1;
 }
 
