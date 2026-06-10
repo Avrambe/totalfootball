@@ -120,7 +120,7 @@ export default function Share({ result, seating, formationName, config, onClose 
           <button disabled style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8, opacity: 0.5, cursor: "default" }}>{t("share.building")}</button>
         ) : (hasNative && canFiles) ? (
           <>
-            <button onClick={native} style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8 }}>{t("share.withImage")}</button>
+            <button onClick={native} style={{ ...bigBtn, background: C.gold, color: C.ink, width: "100%", marginBottom: 8 }}>{t("share.withImage")}</button>
             <div style={{ display: "flex", gap: 8, marginBottom: 10, justifyContent: "center" }}>
               <button onClick={saveImg} style={{ ...ghostBtn, fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13, padding: "10px 16px" }}>{imgSaved ? t("share.saved") : t("share.saveImage")}</button>
               <button onClick={copyImg} style={{ ...ghostBtn, fontFamily: "Inter, sans-serif", fontSize: 12, padding: "8px 12px", opacity: 0.75 }}>{imgCopied ? t("share.copied") : t("share.copyImage")}</button>
