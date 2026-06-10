@@ -1,6 +1,6 @@
-# Total Football
+# Perfect XI
 
-A football squad-builder game (working title). Spin to draw a country (and, in two of three
+A football squad-builder game. Spin to draw a country (and, in two of three
 eras, a year), draft real players into an 11-slot formation, then run the squad through a
 simulated knockout tournament against real historical national teams. Scored on goal
 differential, how far you advanced, and an Elo rating (the leaderboard chase number).

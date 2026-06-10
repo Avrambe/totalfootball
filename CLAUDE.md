@@ -1,7 +1,7 @@
-# Total Football — Project Context
+# Perfect XI — Project Context
 
 ## What this is
-A World Cup squad-builder web game (working title "Total Football"), the soccer counterpart to
+A World Cup squad-builder web game (named "Perfect XI"; repo/folder still `total-football`), the soccer counterpart to
 the user's baseball game **162-0**. Spin to draw a country (+ a year in two of three eras), draft
 real players into an 11-slot formation, run the squad through a simulated knockout tournament vs
 real historical World Cup teams. Scored on goal differential, progression tier, and Elo (the
@@ -250,7 +250,7 @@ offered via the proven 162-0 share chain. New `app/src/components/SquadPitch.jsx
 `app/src/engine/index.js` now puts `formationName` on the returned result so the screen/card can lay out
 the pitch. **Share card** (`app/src/share/shareImage.js`, `generateShareImage({result,seating,
 formationName,config})→Promise<Blob>`): adapts 162-0's canvas technique (await `document.fonts.ready`,
-`S=2` retina, `drawPill`, `toBlob`). Layout top→bottom: TOTAL FOOTBALL header → **mode pill**
+`S=2` retina, `drawPill`, `toBlob`). Layout top→bottom: PERFECT XI header → **mode pill**
 (CLASSIC/EXPERT) → tier ("where you made it") → Champions-only **grade badge** → Elo (+delta) + goal
 differential → **mini pitch** of the XI (each chip = flag + last name + position token, **NO ratings**,
 per the user) → footer. Flags preloaded from `/flags/{code}.svg` into a Map (onerror→text-code fallback),
@@ -317,7 +317,7 @@ social-share sentence via a templated `share.text` key (`{tier}`/`{mode}`/`{elo}
 `draft.placedCount`, `round.*`, `share.text`; English country names come from `teams.json`, not duplicated
 into en.json). The five new locale files (`es/fr/pt/de/it.json`) each carry all en.json keys translated
 **plus** an 88-entry `team.<CODE>` block of localized country names (incl. defunct SUN/DDR/CSK/YUG/SCG/
-IDN/Zaire and the home nations); `app.title` stays "Total Football" (brand) everywhere. Translations are
+IDN/Zaire and the home nations); `app.title` is "Perfect XI" (brand) everywhere. Translations are
 model-authored (natural football terminology) — **a native-speaker review before public launch is the
 recommended follow-up** (flagged to the user). `build.js` already copies `i18n/`, so no build change.
 **Verified live** (Italian, 2026·Classic): switcher re-localizes UI chrome + era/mode cards + tagline +

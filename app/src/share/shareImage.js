@@ -64,7 +64,7 @@ export async function generateShareImage({ result, seating, formationName, confi
 
   // header
   g.textAlign = "center";
-  g.font = "40px 'Bebas Neue',sans-serif"; g.fillStyle = C.gold; g.fillText("TOTAL FOOTBALL", W / 2, 48);
+  g.font = "40px 'Bebas Neue',sans-serif"; g.fillStyle = C.gold; g.fillText("PERFECT XI", W / 2, 48);
   g.font = "15px Inter,sans-serif"; g.fillStyle = C.chalk; g.fillText(t("share.cardSubtitle"), W / 2, 70);
 
   // mode pill

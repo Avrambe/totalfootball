@@ -1,5 +1,5 @@
 {
-  "app.title": "Total Football",
+  "app.title": "Perfect XI",
   "app.tagline": "Build the perfect squad. Take on the world.",
   "loading": "LOADING SQUADS…",
 
@@ -9,9 +9,9 @@
   "era.2026": "2026",
   "era.modern": "Modern",
   "era.alltime": "All-Time",
-  "era.2026.desc": "This year's 48 teams.",
-  "era.modern.desc": "1970–2026.",
-  "era.alltime.desc": "1930–2026.",
+  "era.2026.desc": "This year's 48 teams",
+  "era.modern.desc": "1970–2026",
+  "era.alltime.desc": "1930–2026",
 
   "mode.classic": "Classic",
   "mode.diehard": "Expert",
@@ -118,7 +118,7 @@
   "share.cardTagline": "Build your champion.",
   "share.cardElo": "ELO",
   "share.cardDiff": "goal differential",
-  "share.text": "I just {phrase} with a squad I drafted in Total Football ({mode} mode) — Elo {elo}.",
+  "share.text": "I just {phrase} with a squad I drafted in Perfect XI ({mode} mode) — Elo {elo}.",
   "share.cardSentence": "I just {phrase}.",
 
   "leaderboard.tf.today": "Today",
@@ -136,6 +136,10 @@
   "leaderboard.postedAs": "Posted as \"{name}\"",
   "leaderboard.viewLink": "View leaderboard",
   "leaderboard.topPct": "Top {pct}% of squads",
+  "leaderboard.checking": "Checking the leaderboard…",
+  "leaderboard.made": "YOU MADE THE LEADERBOARD!",
+  "leaderboard.madeSub": "Add your name and claim your spot.",
+  "leaderboard.notTop": "Not quite a top-25 finish this time. Keep drafting!",
   "leaderboard.notConfigured": "Leaderboard coming soon.",
 
   "pos.GK": "Goalkeeper",

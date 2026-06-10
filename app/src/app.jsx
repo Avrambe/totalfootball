@@ -38,7 +38,7 @@ export default function App() {
       <div style={splash}>
         <style>{FONTS}</style>
         <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 54, color: C.gold, letterSpacing: ".02em" }}>
-          TOTAL FOOTBALL
+          PERFECT XI
         </div>
         <div style={{ fontFamily: "Inter, sans-serif", marginTop: 14, fontSize: 13, letterSpacing: ".25em", color: C.chalk, opacity: 0.55 }}>
           {t("loading")}
@@ -51,7 +51,7 @@ export default function App() {
     return (
       <div style={splash}>
         <style>{FONTS}</style>
-        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, color: C.gold }}>TOTAL FOOTBALL</div>
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, color: C.gold }}>PERFECT XI</div>
         <div style={{ fontFamily: "Inter, monospace", fontSize: 12, color: "#f4a261", marginTop: 18, textAlign: "center", maxWidth: 420 }}>
           No cards.json — run the pipeline (`python -m pipeline.build_cards`) then `npm run build`.
         </div>

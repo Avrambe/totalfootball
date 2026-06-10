@@ -55,6 +55,28 @@ export async function topScores(era, mode, timeframe) {
   return r.json();
 }
 
+// Would this Elo place on the board (top 25) in AT LEAST ONE timeframe (today / this week /
+// all-time)? Used to decide whether to even ask for a name — no point prompting someone who
+// wouldn't appear. A timeframe counts as "made" when it has fewer than 25 entries (open slot)
+// OR the Elo beats the current 25th-place score. Fails OPEN (returns true) on any network/parse
+// error so a flaky connection never silently denies a legit qualifier the chance to post.
+export async function leaderboardStanding(era, mode, elo) {
+  if (!boardConfigured()) return { made: false };
+  try {
+    const frames = ["today", "week", "all"];
+    const lists = await Promise.all(frames.map((tf) => topScores(era, mode, tf).catch(() => null)));
+    const madeIn = [];
+    for (let i = 0; i < frames.length; i++) {
+      const rows = lists[i];
+      if (!rows) return { made: true, frames: [], error: true }; // a fetch failed → fail open
+      if (rows.length < 25 || elo > rows[rows.length - 1].elo) madeIn.push(frames[i]);
+    }
+    return { made: madeIn.length > 0, frames: madeIn };
+  } catch (e) {
+    return { made: true, frames: [], error: true };
+  }
+}
+
 // Real percentile only — returns the "top X%" (lower is better) once the config has ≥18 scores,
 // otherwise null (no modeled fallback this phase). Never throws; the stat just hides on failure.
 export async function realPct(era, mode, elo) {

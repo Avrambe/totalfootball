@@ -5,7 +5,7 @@ import Flag from "../components/Flag.jsx";
 import SquadPitch from "../components/SquadPitch.jsx";
 import Share from "../share/Share.jsx";
 import { STYLES } from "../engine/style.js";
-import { submitScore, realPct, boardConfigured } from "../leaderboard/board.js";
+import { submitScore, realPct, boardConfigured, leaderboardStanding } from "../leaderboard/board.js";
 
 // Phase 6 result: the REAL simulated tournament — group + knockout scorelines, opponents, and the
 // final progression tier. Minimal layout on purpose; Elo/grade (Phase 7) and the polished bracket
@@ -98,11 +98,13 @@ function PostBlock({ config, result, seating, clientKey, gamePosted, setGamePost
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState(false);
   const [pct, setPct] = useState(null);
+  const [standing, setStanding] = useState(null); // null = still checking; then { made }
   const configured = boardConfigured();
 
   useEffect(() => {
     let live = true;
     realPct(config.era, config.mode, result.elo).then((p) => { if (live) setPct(p); });
+    leaderboardStanding(config.era, config.mode, result.elo).then((s) => { if (live) setStanding(s); });
     return () => { live = false; };
   }, []);
 
@@ -134,10 +136,17 @@ function PostBlock({ config, result, seating, clientKey, gamePosted, setGamePost
           </div>
           <button onClick={onLeaderboard} style={lbViewBtn}>{t("action.leaderboard")}</button>
         </div>
-      ) : (
+      ) : standing == null ? (
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: C.chalk, opacity: 0.55, textAlign: "center" }}>
+          {t("leaderboard.checking")}
+        </div>
+      ) : standing.made ? (
         <>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: C.chalk, opacity: 0.8, letterSpacing: ".06em", marginBottom: 8 }}>
-            {t("leaderboard.postPrompt")}
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, letterSpacing: ".03em", color: C.gold, textAlign: "center", marginBottom: 4 }}>
+            {t("leaderboard.made")}
+          </div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: C.chalk, opacity: 0.8, letterSpacing: ".02em", marginBottom: 10, textAlign: "center" }}>
+            {t("leaderboard.madeSub")}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
@@ -153,6 +162,13 @@ function PostBlock({ config, result, seating, clientKey, gamePosted, setGamePost
           {err && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "#e07a5f", marginTop: 8 }}>{t("leaderboard.error")}</div>}
           <button onClick={onLeaderboard} style={{ ...ghostBtn, fontSize: 12.5, padding: "8px 16px", marginTop: 10, width: "100%" }}>{t("leaderboard.viewLink")}</button>
         </>
+      ) : (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: C.chalk, opacity: 0.7, marginBottom: 10 }}>
+            {t("leaderboard.notTop")}
+          </div>
+          <button onClick={onLeaderboard} style={lbViewBtn}>{t("action.leaderboard")}</button>
+        </div>
       )}
     </div>
   );
