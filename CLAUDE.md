@@ -409,6 +409,25 @@ by `swapInto(slot)` in `Draft.jsx` (exchange the two players' pins, `refreshPins
 no-empty-slot + cross-line-rejection asserts) + positions/engine/scoring suites all green; `npm run
 build` clean.
 
+**Phase Share-3 (share-system overhaul for virality), 2026-06-10:** four fixes in `Share.jsx` +
+`shareImage.js` + the 6 locale JSONs. (1) **Single URL on native share** — dropped the redundant
+`url:` field from `navigator.share` (the URL already lives at the end of the text; iOS was rendering it
+twice). (2) **New share text with a CTA**, applied to every path (native, X/Bluesky intent, Copy Text):
+two keys `share.text` (Classic) / `share.textExpert` ("(Expert mode)") fold tier + Elo into one line
+ending "Think you can beat it?" — Classic never shows a mode label; "made the {result}" reuses
+`tierPhrase` for natural grammar in all 6 locales; text+URL stays < 300 chars (worst case de Expert =
+155). (3) **Capability-based button hierarchy** keyed on `navigator.canShare({files})`: mobile leads
+with a prominent "Share with image…" and demotes Copy Image to tertiary; desktop hides native and makes
+Copy Image the prominent gold primary with a copy-then-paste hint; while the PNG is still rendering the
+primary slot shows a disabled "Building…" button (no wrong-button flash). (4) **Result image redesigned
+to 4:5 portrait (1080×1350)** so it renders uncropped in X/Bluesky/Facebook feeds — Elo is the hero
+(92px gold, thumbnail-legible) with a small (+delta), small wordmark + tier label above, record line
+(differential · score), Expert-only mode pill, champions-only grade badge, a large mini-pitch of the
+XI, and a gold challenge line "Think you can beat {elo}?" (`share.cardChallenge`, localized) + URL.
+Scorelines intentionally omitted from the card. Verified: `npm run build` clean, all 6 JSONs parse,
+image renders at exactly 1080×1350 with no clipping. **Needs manual device testing:** `navigator.share`
+(the double-URL fix) and `ClipboardItem` image copy can't be exercised in the sandbox.
+
 ## Working norms (user is non-technical)
 - Explain *why*, not just *what*; flag tradeoffs. Never commit/push without explicit instruction.
 - Confirm before destructive actions. Check in at the end of each phase.

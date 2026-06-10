@@ -25,8 +25,8 @@ export default function Share({ result, seating, formationName, config, onClose 
   }, []);
   useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
 
-  const modeLabel = t(config.mode === "diehard" ? "mode.diehard" : "mode.classic");
-  const text = t("share.text", { phrase: tierPhrase(result.tier), mode: modeLabel, elo: result.elo });
+  // Result + Elo folded into one sentence ending in a challenge; only Expert gets the mode label.
+  const text = t(config.mode === "diehard" ? "share.textExpert" : "share.text", { phrase: tierPhrase(result.tier), elo: result.elo });
   const full = SHARE_URL ? `${text} ${SHARE_URL}` : text;
   const enc = encodeURIComponent;
   // X & Bluesky strip attached files from intent URLs, so these are image-first: copy the PNG to the
@@ -54,10 +54,11 @@ export default function Share({ result, seating, formationName, config, onClose 
     if (!imgBlob) return;
     try {
       const file = new File([imgBlob], "perfect-xi.png", { type: "image/png" });
+      // URL is already at the end of `full`; passing `url` too makes iOS render the link twice.
       if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-        await navigator.share({ text: full, url: SHARE_URL || undefined, files: [file] });
+        await navigator.share({ text: full, files: [file] });
       } else {
-        await navigator.share({ text: full, url: SHARE_URL || undefined });
+        await navigator.share({ text: full });
       }
     } catch (e) {}
   };
@@ -112,16 +113,28 @@ export default function Share({ result, seating, formationName, config, onClose 
 
         <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: C.chalk, marginBottom: 10 }}>{text}</div>
 
-        {hasNative && canFiles && (
-          <button onClick={native} disabled={!imgBlob} style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8, opacity: imgBlob ? 1 : 0.5, cursor: imgBlob ? "pointer" : "default" }}>{t("share.withImage")}</button>
+        {/* Capability-based hierarchy: mobile leads with native file-share; desktop (no file share)
+            leads with Copy Image + the copy/paste hint. `canFiles` resolves synchronously, so the
+            only wait is the image rendering — show a disabled loading button until then. */}
+        {!imgBlob ? (
+          <button disabled style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8, opacity: 0.5, cursor: "default" }}>{t("share.building")}</button>
+        ) : (hasNative && canFiles) ? (
+          <>
+            <button onClick={native} style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8 }}>{t("share.withImage")}</button>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10, justifyContent: "center" }}>
+              <button onClick={saveImg} style={{ ...ghostBtn, fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13, padding: "10px 16px" }}>{imgSaved ? t("share.saved") : t("share.saveImage")}</button>
+              <button onClick={copyImg} style={{ ...ghostBtn, fontFamily: "Inter, sans-serif", fontSize: 12, padding: "8px 12px", opacity: 0.75 }}>{imgCopied ? t("share.copied") : t("share.copyImage")}</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <button onClick={copyImg} style={{ ...bigBtn, background: C.gold, color: C.ink, width: "100%", marginBottom: 8 }}>{imgCopied ? t("share.copied") : t("share.copyImage")}</button>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, justifyContent: "center" }}>
+              <button onClick={saveImg} style={{ ...ghostBtn, fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13, padding: "10px 16px" }}>{imgSaved ? t("share.saved") : t("share.saveImage")}</button>
+            </div>
+            {!imgCopied && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: C.chalk, opacity: 0.55, marginBottom: 10, textAlign: "center" }}>{t("share.copyHint")}</div>}
+          </>
         )}
-        {imgBlob && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <button onClick={copyImg} style={{ ...bigBtn, background: C.gold, color: C.ink, flex: 1 }}>{imgCopied ? t("share.copied") : t("share.copyImage")}</button>
-            <button onClick={saveImg} style={{ ...ghostBtn, fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13, padding: "10px 16px" }}>{imgSaved ? t("share.saved") : t("share.saveImage")}</button>
-          </div>
-        )}
-        {imgBlob && !imgCopied && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: C.chalk, opacity: 0.55, marginBottom: 10, textAlign: "center" }}>{t("share.copyHint")}</div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(92px,1fr))", gap: 7 }}>
           {imageFirst.map(([label, intent, col]) => (

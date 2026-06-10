@@ -119,8 +119,10 @@
   "share.cardTagline": "Build your champion.",
   "share.cardElo": "ELO",
   "share.cardDiff": "goal differential",
-  "share.text": "I just {phrase} with a squad I drafted in Perfect XI ({mode} mode) — Elo {elo}.",
+  "share.text": "I just {phrase} with a {elo} Elo in Perfect XI. Think you can beat it?",
+  "share.textExpert": "I just {phrase} with a {elo} Elo in Perfect XI (Expert mode). Think you can beat it?",
   "share.cardSentence": "I just {phrase}.",
+  "share.cardChallenge": "Think you can beat {elo}?",
   "share.imageCopiedPaste": "Image copied — paste it into your post.",
 
   "leaderboard.tf.today": "Today",

@@ -18,12 +18,15 @@ export default function SquadPitch({ seating, formationName, diehard, height = 4
   const narrow = w < NARROW;
   const formation = getFormation(formationName);
   if (!formation) return null;
+  // Show the represented year only when the squad spans years (i.e. not a 2026-only squad, where
+  // every card is 2026 and the year is just noise).
+  const showYear = Object.values(seating || {}).some((c) => c && c.year && c.year !== 2026);
   return narrow
-    ? <LineView formation={formation} seating={seating} diehard={diehard} />
-    : <PitchView formation={formation} seating={seating} diehard={diehard} height={height} />;
+    ? <LineView formation={formation} seating={seating} diehard={diehard} showYear={showYear} />
+    : <PitchView formation={formation} seating={seating} diehard={diehard} height={height} showYear={showYear} />;
 }
 
-function PitchView({ formation, seating, diehard, height }) {
+function PitchView({ formation, seating, diehard, height, showYear }) {
   const ln = `1px solid ${C.pitchLine}`;
   return (
     <div style={{
@@ -39,21 +42,21 @@ function PitchView({ formation, seating, diehard, height }) {
 
       {formation.slots.map((slot) => (
         <div key={slot.id} style={{ position: "absolute", left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, transform: "translate(-50%,-50%)", zIndex: 2 }}>
-          <Chip slot={slot} card={seating[slot.id]} diehard={diehard} />
+          <Chip slot={slot} card={seating[slot.id]} diehard={diehard} showYear={showYear} />
         </div>
       ))}
     </div>
   );
 }
 
-function LineView({ formation, seating, diehard }) {
+function LineView({ formation, seating, diehard, showYear }) {
   const bands = [...new Set(formation.slots.map((s) => s.y))].sort((a, b) => a - b);
   return (
     <div style={{ borderRadius: 10, background: `linear-gradient(${C.pitch} 0%, ${C.pitchDeep} 100%)`, border: `1px solid ${C.pitchLine}`, padding: "14px 8px" }}>
       {bands.map((y) => (
         <div key={y} style={{ display: "flex", justifyContent: "center", gap: 8, margin: "10px 0", flexWrap: "wrap" }}>
           {formation.slots.filter((s) => s.y === y).sort((a, b) => a.x - b.x).map((slot) => (
-            <Chip key={slot.id} slot={slot} card={seating[slot.id]} diehard={diehard} />
+            <Chip key={slot.id} slot={slot} card={seating[slot.id]} diehard={diehard} showYear={showYear} />
           ))}
         </div>
       ))}
@@ -61,7 +64,7 @@ function LineView({ formation, seating, diehard }) {
   );
 }
 
-function Chip({ slot, card, diehard }) {
+function Chip({ slot, card, diehard, showYear }) {
   const base = {
     width: 78, minHeight: 46, borderRadius: 6, padding: "5px 6px",
     fontFamily: "Inter, sans-serif", textAlign: "center",
@@ -81,6 +84,7 @@ function Chip({ slot, card, diehard }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 9.5, opacity: 0.75 }}>
         <Flag code={card.team_code} h={10} />
         {!diehard && <span>{card.wc_rating}</span>}
+        {showYear && card.year ? <span style={{ opacity: 0.85 }}>· {card.year}</span> : null}
       </div>
     </div>
   );

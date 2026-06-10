@@ -1,7 +1,7 @@
 // The slot-machine reel timing, adapted from 162-0's spin(): ~14 frames tumbling through a pre-built
 // sequence of frames before snapping to the pre-picked target. The frames are produced by
 // pools.reelFrames so every one is a REAL (team, year) pairing (no impossible combos flash by), and
-// on a full draw the year settles before the team. The frame interval RAMPS UP over the last few
+// on a full draw both axes tumble until the final snap (country + year land together). The frame interval RAMPS UP over the last few
 // frames so the reel visibly decelerates onto the target — it reads like a real spinner instead of
 // stopping abruptly. Kept framework-free: the caller supplies the frames + onFrame/onDone and owns
 // React state.

@@ -57,6 +57,19 @@ export default function Draft({ config, onComplete, onExit }) {
     return () => cancelRef.current && cancelRef.current();
   }, []);
 
+  // On phones, when a spin LANDS (first spin of the game, the auto-spin after a placement, or a
+  // respin), slide the reel's country/flag pillbox to the top of the viewport so the offered players
+  // that just appeared are visible below the fold without manual scrolling. Recycles 162-0's scroll
+  // mechanism + timing (350ms). We trigger on the offer arriving (offer only ever becomes truthy when
+  // a spin finishes — it's cleared to null while the reel tumbles), and defer one animation frame so
+  // the freshly-rendered offer cards are laid out before we measure the scroll target. Desktop shows
+  // both columns side-by-side, so no scroll is needed there.
+  useEffect(() => {
+    if (!narrow || !offer) return;
+    const id = requestAnimationFrame(() => smoothScrollToEl(offerRef.current, 350));
+    return () => cancelAnimationFrame(id);
+  }, [offer, narrow]);
+
   function flashToast(msg) {
     setToast(msg);
     setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 2200);
@@ -285,9 +298,9 @@ export default function Draft({ config, onComplete, onExit }) {
     } else {
       // Global respin budget: the next squad auto-spins WITHOUT resetting the allowance, so the
       // shared pool of respins is scarce across the whole draft (only the initial spin seeds them).
+      // The spin-landed effect (above) scrolls the reel to the top on phones once the new offer
+      // renders, so the fresh offer is in view — no separate scroll needed here.
       spin(newPlaced, fName, { reset: false });
-      // Scroll back to the fresh offer so the next squad is in view (162-0 feel).
-      setTimeout(() => smoothScrollToEl(offerRef.current, 400), 0);
     }
   }
 
@@ -331,8 +344,8 @@ export default function Draft({ config, onComplete, onExit }) {
             </div>
           )}
           {narrow
-            ? <LineBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} placing={picking && picking.card} moving={picking && (picking.mode === "move" || picking.mode === "relocate")} pending={picking && picking.pending} w={w} />
-            : <PitchBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} />}
+            ? <LineBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} placing={picking && picking.card} moving={picking && (picking.mode === "move" || picking.mode === "relocate")} pending={picking && picking.pending} w={w} showYear={!is2026} />
+            : <PitchBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} showYear={!is2026} />}
           {/* Desktop: the "placing" banner sits BELOW the pitch (clear of the top-right formation
               picker), rather than overlaid on the pitch's top edge where it collided. */}
           {!narrow && picking && picking.card && (
@@ -393,7 +406,7 @@ function FormationPicker({ holding, value, onChange }) {
 // Conventional single-team lineup view: the XI attacks UP, so the halfway line + center circle sit
 // at the TOP (the attacking edge, just above the forwards) and the penalty area is at the BOTTOM
 // around the keeper. A line color reused for all markings.
-function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot, onPlacedTap, diehard }) {
+function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot, onPlacedTap, diehard, showYear }) {
   const ln = `1px solid ${C.pitchLine}`;
   return (
     <div style={{
@@ -413,7 +426,7 @@ function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot
 
       {formation.slots.map((slot) => (
         <div key={slot.id} style={{ position: "absolute", left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, transform: "translate(-50%,-50%)", zIndex: 2 }}>
-          <SlotChip slot={slot} card={seating[slot.id]} highlight={pickSpotIds.has(slot.id)} eff={effById[slot.id]} kind={kindById[slot.id]} onSpot={onSpot} onPlacedTap={onPlacedTap} diehard={diehard} />
+          <SlotChip slot={slot} card={seating[slot.id]} highlight={pickSpotIds.has(slot.id)} eff={effById[slot.id]} kind={kindById[slot.id]} onSpot={onSpot} onPlacedTap={onPlacedTap} diehard={diehard} showYear={showYear} />
         </div>
       ))}
     </div>
@@ -421,7 +434,7 @@ function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot
 }
 
 /* ---------- Line rows (narrow / mobile) ---------- */
-function LineBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot, onPlacedTap, diehard, placing, moving, pending, w }) {
+function LineBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot, onPlacedTap, diehard, placing, moving, pending, w, showYear }) {
   // Rows follow the formation's pitch bands (slot.y), attack at top -> keeper at bottom, so a
   // "4-2-3-1" reads as four outfield lines here too — matching the desktop pitch and the name.
   const bands = [...new Set(formation.slots.map((s) => s.y))].sort((a, b) => a - b);
@@ -438,7 +451,7 @@ function LineBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot,
       {bands.map((y) => (
         <div key={y} style={{ display: "flex", justifyContent: "center", gap: GAP, margin: "8px 0", padding: "6px 4px", flexWrap: "nowrap", border: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.02)", borderRadius: 8 }}>
           {formation.slots.filter((s) => s.y === y).sort((a, b) => a.x - b.x).map((slot) => (
-            <SlotChip key={slot.id} slot={slot} card={seating[slot.id]} highlight={pickSpotIds.has(slot.id)} eff={effById[slot.id]} kind={kindById[slot.id]} onSpot={onSpot} onPlacedTap={onPlacedTap} diehard={diehard} width={chipW} />
+            <SlotChip key={slot.id} slot={slot} card={seating[slot.id]} highlight={pickSpotIds.has(slot.id)} eff={effById[slot.id]} kind={kindById[slot.id]} onSpot={onSpot} onPlacedTap={onPlacedTap} diehard={diehard} width={chipW} showYear={showYear} />
           ))}
         </div>
       ))}
@@ -446,7 +459,7 @@ function LineBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot,
   );
 }
 
-function SlotChip({ slot, card, highlight, eff, kind, onSpot, onPlacedTap, diehard, width = 78 }) {
+function SlotChip({ slot, card, highlight, eff, kind, onSpot, onPlacedTap, diehard, width = 78, showYear }) {
   const small = width < 64; // shrink text a step so 5-across still reads on a phone
   const base = {
     width, minHeight: 46, borderRadius: 6, padding: "5px 4px",
@@ -492,6 +505,7 @@ function SlotChip({ slot, card, highlight, eff, kind, onSpot, onPlacedTap, dieha
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: small ? 8.5 : 9.5, opacity: 0.75 }}>
           <Flag code={card.team_code} h={10} />
           {!diehard && <span>{card.wc_rating}</span>}
+          {showYear && card.year ? <span>· {small ? `'${String(card.year).slice(2)}` : card.year}</span> : null}
         </div>
       </Tag>
     );

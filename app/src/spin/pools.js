@@ -101,21 +101,17 @@ export function yearsForTeam(era, teamCode) {
 }
 
 // Build the reel's tumble frames so EVERY frame is a real (team, year) pairing — no impossible
-// combos (e.g. "Serbia and Montenegro 1934") flash by mid-spin. On a full draw the year settles
-// first (locks ~60% through), then the team keeps tumbling but only among teams that actually played
-// that settled year — the "draw a year, then a team that played it" model. Single-axis respins tumble
-// only the live axis within the values valid for the held one. `target` = the pre-picked { teamCode,
-// name, year }; `axes` = { team, year }; `count` = number of tumble frames before the final snap.
+// combos (e.g. "Serbia and Montenegro 1934") flash by mid-spin. On a full draw BOTH axes tumble for
+// the whole spin (each frame a real era squad) so the country and year reels land together on the
+// final snap. Single-axis respins tumble only the live axis within the values valid for the held one.
+// `target` = the pre-picked { teamCode, name, year }; `axes` = { team, year }; `count` = number of
+// tumble frames before the final snap.
 export function reelFrames(era, target, axes, count) {
   const frames = [];
   const teamPool = squadsInYear(era, target.year); // {name, code} valid for the settled year
   if (axes.team && axes.year) {
     const all = eraSquads(era);
-    const yLock = Math.max(1, Math.round(count * 0.6)); // year locks first; team runs on after
-    for (let i = 0; i < count; i++) {
-      if (i < yLock) { const sq = pickRand(all); frames.push({ team: sq.name, year: sq.year, code: sq.teamCode }); }
-      else { const sq = pickRand(teamPool); frames.push({ team: sq.name, year: target.year, code: sq.code }); }
-    }
+    for (let i = 0; i < count; i++) { const sq = pickRand(all); frames.push({ team: sq.name, year: sq.year, code: sq.teamCode }); }
   } else if (axes.team) {
     for (let i = 0; i < count; i++) { const sq = pickRand(teamPool); frames.push({ team: sq.name, year: target.year, code: sq.code }); }
   } else if (axes.year) {
