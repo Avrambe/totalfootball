@@ -83,6 +83,7 @@
   "draft.toMakeRoom": "to free a slot for {name}",
   "draft.respinCountry": "RESPIN COUNTRY",
   "draft.respinYear": "RESPIN YEAR",
+  "draft.respinsLeft": "Respins left: {n}",
   "draft.mustCommit": "No respins left — commit a player",
   "draft.greyHint": "No room for him in any formation that fits your squad.",
   "draft.alreadyDrafted": "Already on your squad",
@@ -120,6 +121,7 @@
   "share.cardDiff": "goal differential",
   "share.text": "I just {phrase} with a squad I drafted in Perfect XI ({mode} mode) — Elo {elo}.",
   "share.cardSentence": "I just {phrase}.",
+  "share.imageCopiedPaste": "Image copied — paste it into your post.",
 
   "leaderboard.tf.today": "Today",
   "leaderboard.tf.week": "This Week",

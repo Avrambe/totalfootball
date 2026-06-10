@@ -391,6 +391,24 @@ continuity-tiebreak, and moveSpots asserts) + `node app/src/positions/verify.mjs
 live (iPhone 390×844): 5-4-1 back-five on one readable row; tapping KDB showed current CM 97% + move
 targets LM/RM 91%, move worked; 5-4-1→4-3-3 re-seated KDB RM(91% off-pos)→CM(97% natural).
 
+**Phase Respin (single fungible respin pool), 2026-06-10:** the rigid 3-country + 3-year split is now
+ONE shared pool of `RESPINS_PER_DRAFT = 6` (a module const in `Draft.jsx`), spendable on country OR
+year, one at a time; seeded only on a fresh draft (the post-place auto-spin keeps `{reset:false}` so
+the budget stays scarce across all 11 picks). 2026 era (no year axis) spends all 6 on country. UI shows
+one "Respins left: {n}" line (`draft.respinsLeft`, added to all 6 locales); pools.js draw/eligibility
+logic unchanged.
+
+**Phase Swap (two placed players exchange slots), 2026-06-10:** the MOVE flow now supports a direct
+SWAP. In `offer.js` `moveSpots`, an occupied target slot is offered as `kind:"swap"` (blue, `#5ab1ff`)
+when the two are **mutually eligible** — the mover fits the target's slot (already required) AND the
+occupant fits the mover's current slot (`canPlay(occupant, mySlot).eligible`). Swap takes **priority
+over bump**; the old `bump` (relocate the incumbent to an empty slot) is the fallback when they're not
+mutually eligible. Unlike bump, swap works on a **full 11/11 squad** (no empty slot needed). Executed
+by `swapInto(slot)` in `Draft.jsx` (exchange the two players' pins, `refreshPins`). Verify:
+`node app/src/draft/verify.mjs` (57/57 — the old 2-MF "bump" assert is now "swap"; added full-XI swap +
+no-empty-slot + cross-line-rejection asserts) + positions/engine/scoring suites all green; `npm run
+build` clean.
+
 ## Working norms (user is non-technical)
 - Explain *why*, not just *what*; flag tradeoffs. Never commit/push without explicit instruction.
 - Confirm before destructive actions. Check in at the end of each phase.

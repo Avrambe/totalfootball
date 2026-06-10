@@ -13,6 +13,8 @@ export default function Share({ result, seating, formationName, config, onClose 
   const [imgCopied, setImgCopied] = useState(false);
   const [imgSaved, setImgSaved] = useState(false);
   const [textCopied, setTextCopied] = useState(false);
+  const [toast, setToast] = useState(null);
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
 
   useEffect(() => {
     let live = true;
@@ -27,10 +29,14 @@ export default function Share({ result, seating, formationName, config, onClose 
   const text = t("share.text", { phrase: tierPhrase(result.tier), mode: modeLabel, elo: result.elo });
   const full = SHARE_URL ? `${text} ${SHARE_URL}` : text;
   const enc = encodeURIComponent;
-  const links = [
+  // X & Bluesky strip attached files from intent URLs, so these are image-first: copy the PNG to the
+  // clipboard, open the composer, and prompt the user to paste it in.
+  const imageFirst = [
     ["X", `https://twitter.com/intent/tweet?text=${enc(full)}`, "#1d9bf0"],
-    ["Facebook", `https://www.facebook.com/sharer/sharer.php?u=${enc(SHARE_URL || "")}&quote=${enc(text)}`, "#1877f2"],
     ["Bluesky", `https://bsky.app/intent/compose?text=${enc(full)}`, "#1185fe"],
+  ];
+  const links = [
+    ["Facebook", `https://www.facebook.com/sharer/sharer.php?u=${enc(SHARE_URL || "")}&quote=${enc(text)}`, "#1877f2"],
     ["WhatsApp", `https://wa.me/?text=${enc(full)}`, "#25d366"],
     ["Telegram", `https://t.me/share/url?url=${enc(SHARE_URL || " ")}&text=${enc(text)}`, "#229ed9"],
     ["Reddit", `https://www.reddit.com/submit?title=${enc(text)}${SHARE_URL ? `&url=${enc(SHARE_URL)}` : ""}`, "#ff4500"],
@@ -38,22 +44,41 @@ export default function Share({ result, seating, formationName, config, onClose 
   ];
 
   const hasNative = typeof navigator !== "undefined" && !!navigator.share;
+  // Probe with a tiny dummy file only to decide whether to OFFER the native button; the real
+  // generated PNG is re-checked with canShare() at call time.
   const canFiles = hasNative && typeof navigator.canShare === "function" && (() => {
     try { return navigator.canShare({ files: [new File(["x"], "t.png", { type: "image/png" })] }); } catch (e) { return false; }
   })();
 
   const native = async () => {
+    if (!imgBlob) return;
     try {
-      if (imgBlob && canFiles) await navigator.share({ text, url: SHARE_URL || undefined, files: [new File([imgBlob], "perfect-xi.png", { type: "image/png" })] });
-      else await navigator.share({ text, url: SHARE_URL || undefined });
+      const file = new File([imgBlob], "perfect-xi.png", { type: "image/png" });
+      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+        await navigator.share({ text: full, url: SHARE_URL || undefined, files: [file] });
+      } else {
+        await navigator.share({ text: full, url: SHARE_URL || undefined });
+      }
     } catch (e) {}
   };
+  // Safari treats the clipboard write as gesture-initiated only when the blob is wrapped in a Promise.
+  const writeImgToClipboard = () => navigator.clipboard.write([new ClipboardItem({ "image/png": Promise.resolve(imgBlob) })]);
   const copyImg = async () => {
     if (!imgBlob) return;
     try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": imgBlob })]);
+      await writeImgToClipboard();
       setImgCopied(true); setTimeout(() => setImgCopied(false), 2000);
     } catch (e) { saveImg(); }
+  };
+  // Copy without flipping the button label — the toast is the only feedback (X/Bluesky open a new tab).
+  const copyImgQuiet = async () => {
+    if (!imgBlob) return false;
+    try { await writeImgToClipboard(); return true; } catch (e) { return false; }
+  };
+  const composeWithImage = (intentUrl) => async () => {
+    const ok = await copyImgQuiet();
+    window.open(intentUrl, "_blank", "noopener,noreferrer");
+    if (ok) showToast(t("share.imageCopiedPaste"));
   };
   const saveImg = () => {
     if (!imgBlob) return;
@@ -88,7 +113,7 @@ export default function Share({ result, seating, formationName, config, onClose 
         <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: C.chalk, marginBottom: 10 }}>{text}</div>
 
         {hasNative && canFiles && (
-          <button onClick={native} style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8 }}>{t("share.withImage")}</button>
+          <button onClick={native} disabled={!imgBlob} style={{ ...bigBtn, background: C.ink, color: C.chalk, width: "100%", marginBottom: 8, opacity: imgBlob ? 1 : 0.5, cursor: imgBlob ? "pointer" : "default" }}>{t("share.withImage")}</button>
         )}
         {imgBlob && (
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -99,6 +124,10 @@ export default function Share({ result, seating, formationName, config, onClose 
         {imgBlob && !imgCopied && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: C.chalk, opacity: 0.55, marginBottom: 10, textAlign: "center" }}>{t("share.copyHint")}</div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(92px,1fr))", gap: 7 }}>
+          {imageFirst.map(([label, intent, col]) => (
+            <button key={label} onClick={composeWithImage(intent)} disabled={!imgBlob}
+              style={{ textAlign: "center", padding: "9px 6px", borderRadius: 5, background: col, color: "#fff", border: "none", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, cursor: imgBlob ? "pointer" : "default", opacity: imgBlob ? 1 : 0.5 }}>{label}</button>
+          ))}
           {links.map(([label, href, col]) => (
             <a key={label} href={href} target="_blank" rel="noopener noreferrer"
               style={{ textDecoration: "none", textAlign: "center", padding: "9px 6px", borderRadius: 5, background: col, color: "#fff", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600 }}>{label}</a>
@@ -106,6 +135,9 @@ export default function Share({ result, seating, formationName, config, onClose 
           <button onClick={copyText} style={{ textAlign: "center", padding: "9px 6px", borderRadius: 5, background: "rgba(255,255,255,.08)", color: C.chalk, border: `1px solid ${C.pitchLine}`, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{textCopied ? t("share.textCopied") : t("share.copyText")}</button>
         </div>
       </div>
+      {toast && (
+        <div style={{ position: "fixed", left: "50%", bottom: 24, transform: "translateX(-50%)", background: C.ink, color: C.chalk, border: `1px solid ${C.gold}`, borderRadius: 8, padding: "10px 16px", fontFamily: "Inter, sans-serif", fontSize: 13, zIndex: 90, boxShadow: "0 4px 16px rgba(0,0,0,.5)", maxWidth: "88%", textAlign: "center" }}>{toast}</div>
+      )}
     </div>
   );
 }

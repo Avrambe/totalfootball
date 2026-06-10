@@ -299,9 +299,15 @@ export function moveSpots(card, placed, formationName, pins) {
         spots.push({ slot, effectiveness: cp.effectiveness, kind: "open" });
       }
     } else {
-      // Occupied slot: a bump ONLY if the incumbent has a single-move home (an open slot he can take),
-      // matching the manual relocate step — so a bump is never a dead end. (No chained reshuffles.)
-      if (openRelocations(occupant, placed, formation, pins, slot.id).length) {
+      // Occupied slot. Prefer a SWAP when the two are mutually eligible (the mover fits the occupant's
+      // slot — already true here — AND the occupant fits the mover's current slot): they exchange spots.
+      // This is the only thing that works on a full 11/11 squad (no empty slot to bump into).
+      const mySlot = formation.slots.find((s) => s.id === currentSlotId);
+      if (mySlot && canPlay(occupant, mySlot).eligible) {
+        spots.push({ slot, effectiveness: cp.effectiveness, kind: "swap" });
+      } else if (openRelocations(occupant, placed, formation, pins, slot.id).length) {
+        // Fallback bump: the incumbent has a single-move home (an open slot he can take), matching the
+        // manual relocate step — so a bump is never a dead end. (No chained reshuffles.)
         spots.push({ slot, effectiveness: cp.effectiveness, kind: "bump" });
       }
     }

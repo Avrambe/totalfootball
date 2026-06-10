@@ -136,7 +136,7 @@ check("continuity tiebreak seats the card on its previous token (CDM)", optCdm[c
 
 console.log("== moveSpots: tap a placed player to move him ==");
 // 2 MF placed in 4-3-3 (3 MF slots). Move one: his slot = current, the other MF card's
-// slot = bump (incumbent can re-seat in the free MF slot), the empty MF slot = open.
+// slot = swap (the two are mutually eligible, so they trade places), the empty MF slot = open.
 const mf2 = many(2, "MF");
 const moverFormation = "4-3-3";
 const moveSeat = seat(mf2, getFormation(moverFormation));
@@ -144,9 +144,24 @@ const movePins = new Map(Object.entries(moveSeat).map(([sid, c]) => [c.player_id
 const ms = moveSpots(mf2[0], mf2, moverFormation, movePins);
 check("moveSpots offers exactly one 'current' (where he sits now)", ms.filter((sp) => sp.kind === "current").length === 1);
 check("moveSpots offers one 'open' (the empty MF slot)", ms.filter((sp) => sp.kind === "open").length === 1);
-check("moveSpots offers one 'bump' (the other MF card, re-seatable)", ms.filter((sp) => sp.kind === "bump").length === 1);
+check("moveSpots offers one 'swap' (the other MF card, mutually eligible)", ms.filter((sp) => sp.kind === "swap").length === 1);
+check("moveSpots offers no 'bump' when a swap is possible", ms.filter((sp) => sp.kind === "bump").length === 0);
+check("the 'swap' spot carries the mover's effectiveness there", ms.find((sp) => sp.kind === "swap").effectiveness === 1.0);
 check("moveSpots never offers a cross-line slot (all MF for an MF card)", ms.every((sp) => sp.slot.line === "MF"));
 check("the 'current' spot carries his effectiveness there", ms.find((sp) => sp.kind === "current").effectiveness === 1.0);
+
+// Full 11/11 squad: swap still works even with no empty slot (the no-bump case).
+const fullXI = [card("GK"), ...many(4, "DF"), ...many(3, "MF"), ...many(3, "FW")];
+const fullSeat = seat(fullXI, getFormation("4-3-3"));
+const fullPins = new Map(Object.entries(fullSeat).map(([sid, c]) => [c.player_id, sid]));
+const mfCards = fullXI.filter((c) => c.position === "MF");
+const msFull = moveSpots(mfCards[0], fullXI, "4-3-3", fullPins);
+check("full XI: a same-line teammate's slot is offered as 'swap'", msFull.filter((sp) => sp.kind === "swap").length >= 1);
+check("full XI: no 'open' slots (squad is full)", msFull.filter((sp) => sp.kind === "open").length === 0);
+
+// Cross-line: a GK is never offered a swap with an outfield slot (not mutually eligible).
+const msGk = moveSpots(fullXI[0], fullXI, "4-3-3", fullPins);
+check("GK move offers no cross-line swap (only his own GK slot)", msGk.every((sp) => sp.slot.line === "GK"));
 
 console.log("== openLines: spin never dead-ends ==");
 check("empty roster: all four lines open", openLines([], "4-3-3").size === 4);

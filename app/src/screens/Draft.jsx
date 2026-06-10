@@ -14,6 +14,7 @@ import { runReel, rnd, FRAMES } from "../spin/reel.js";
 
 const POS_ORDER = { GK: 0, DF: 1, MF: 2, FW: 3 };
 const NARROW = 760;
+const RESPINS_PER_DRAFT = 6; // one shared pool, spendable on country OR year (one at a time)
 
 export default function Draft({ config, onComplete, onExit }) {
   const [formationName, setFormationName] = useState(DEFAULT_FORMATION);
@@ -24,7 +25,7 @@ export default function Draft({ config, onComplete, onExit }) {
   const [spinning, setSpinning] = useState(false);
   const [offer, setOffer] = useState(null);             // { teamCode, name, year, cards }
   const [current, setCurrent] = useState(null);          // the drawn squad { teamCode, name, year }
-  const [respins, setRespins] = useState({ team: 3, year: 3 }); // independent per-axis allowance
+  const [respins, setRespins] = useState(RESPINS_PER_DRAFT); // shared pool, either axis
   const [picking, setPicking] = useState(null);          // { card, formationName, spots }
   const [formationChoice, setFormationChoice] = useState(null); // { card, options }
   const [toast, setToast] = useState(null);
@@ -61,9 +62,9 @@ export default function Draft({ config, onComplete, onExit }) {
     setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 2200);
   }
 
-  // Draw a squad onto the reel. Options: `reset` => fresh spin event (both respin allowances back
-  // to 3); `fix` pins one axis ({year} reroll country, {teamCode} reroll year); `axes` chooses which
-  // reel axes tumble (defaults to both, year locked in the 2026 era).
+  // Draw a squad onto the reel. Options: `reset` => fresh spin event (shared respin pool back to
+  // RESPINS_PER_DRAFT); `fix` pins one axis ({year} reroll country, {teamCode} reroll year); `axes`
+  // chooses which reel axes tumble (defaults to both, year locked in the 2026 era).
   function spin(placedArg, fName, { reset = false, fix = null, axes = null } = {}) {
     const targets = validTargets(config.era, placedArg, fName, fix);
     if (!targets.length) return;
@@ -79,7 +80,7 @@ export default function Draft({ config, onComplete, onExit }) {
     setSpinning(true);
     setOffer(null);
     setPicking(null);
-    if (reset) setRespins({ team: 3, year: 3 });
+    if (reset) setRespins(RESPINS_PER_DRAFT);
     setCurrent({ teamCode: pick.teamCode, name: pick.name, year: pick.year });
     cancelRef.current && cancelRef.current();
     const useAxes = axes || { team: true, year: !is2026 };
@@ -94,17 +95,18 @@ export default function Draft({ config, onComplete, onExit }) {
     });
   }
 
-  // Reroll just the country (hold the year). Tumbles the team axis only.
+  // Reroll just the country (hold the year). Tumbles the team axis only. Spends one shared respin.
   function respinCountry() {
-    if (spinning || respins.team <= 0 || !current) return;
-    setRespins((r) => ({ ...r, team: r.team - 1 }));
+    if (spinning || respins <= 0 || !current) return;
+    setRespins((r) => r - 1);
     spin(placed, formationName, { fix: { year: current.year }, axes: { team: true, year: false } });
   }
 
   // Reroll just the year (hold the country). Tumbles the year axis only. Not available in 2026.
+  // Spends one from the same shared pool as the country reroll.
   function respinYear() {
-    if (spinning || respins.year <= 0 || !current || is2026) return;
-    setRespins((r) => ({ ...r, year: r.year - 1 }));
+    if (spinning || respins <= 0 || !current || is2026) return;
+    setRespins((r) => r - 1);
     spin(placed, formationName, { fix: { teamCode: current.teamCode }, axes: { team: false, year: true } });
   }
 
@@ -203,6 +205,7 @@ export default function Draft({ config, onComplete, onExit }) {
 
     if (picking.mode === "move") {
       if (kind === "current") { setPicking(null); return; }
+      if (kind === "swap") { swapInto(slot); return; }
       if (kind === "bump") { startRelocate(slot); return; }
       moveTo(slot);
       return;
@@ -245,6 +248,21 @@ export default function Draft({ config, onComplete, onExit }) {
     setPicking(null);
   }
 
+  // Two placed players exchange slots: the mover (A) takes the tapped slot, the incumbent (B) takes
+  // the mover's old slot. Works even on a full XI since neither needs an empty slot.
+  function swapInto(slot) {
+    const { card } = picking; // mover A
+    const incumbent = seating[slot.id]; // B at the tapped slot
+    const mySlotId = Object.keys(seating).find(
+      (sid) => seating[sid] && seating[sid].player_id === card.player_id
+    );
+    const withPin = new Map(pins);
+    withPin.set(card.player_id, slot.id);
+    if (incumbent && mySlotId) withPin.set(incumbent.player_id, mySlotId);
+    refreshPins(placed, formationName, withPin);
+    setPicking(null);
+  }
+
   function placeAt(slot) {
     const { card, formationName: fName } = picking;
     const newPlaced = [...placed, card];
@@ -266,7 +284,7 @@ export default function Draft({ config, onComplete, onExit }) {
       window.__finalSquad = { seating: finalSeat, formationName: fName };
     } else {
       // Global respin budget: the next squad auto-spins WITHOUT resetting the allowance, so the
-      // 3 country + 3 year respins are scarce across the whole draft (only the initial spin seeds them).
+      // shared pool of respins is scarce across the whole draft (only the initial spin seeds them).
       spin(newPlaced, fName, { reset: false });
       // Scroll back to the fresh offer so the next squad is in view (162-0 feel).
       setTimeout(() => smoothScrollToEl(offerRef.current, 400), 0);
@@ -293,7 +311,8 @@ export default function Draft({ config, onComplete, onExit }) {
           {t(`era.${config.era}`)} · {t(`mode.${config.mode}`)}
         </div>
         <div style={{ flex: 1 }} />
-        <FormationPicker holding={holding} value={formationName} onChange={switchFormation} />
+        {/* On phones the picker stays in the header; on desktop it moves onto the pitch (below). */}
+        {narrow && <FormationPicker holding={holding} value={formationName} onChange={switchFormation} />}
       </div>
       {reason && (
         <div style={{ width: "100%", maxWidth: 1080, marginTop: 6, fontFamily: "Inter, sans-serif", fontSize: 12, color: C.gold, opacity: 0.9 }}>
@@ -303,10 +322,24 @@ export default function Draft({ config, onComplete, onExit }) {
 
       {/* Body */}
       <div style={{ width: "100%", maxWidth: 1080, marginTop: 14, display: "flex", gap: 18, flexDirection: narrow ? "column" : "row", alignItems: "flex-start" }}>
-        <div ref={boardRef} style={{ flex: narrow ? "none" : "0 0 420px", width: narrow ? "100%" : 420 }}>
+        <div ref={boardRef} style={{ position: "relative", flex: narrow ? "none" : "0 0 420px", width: narrow ? "100%" : 420 }}>
+          {/* Desktop: overlay the formation picker in the pitch's top-right corner, next to the
+              layout it controls (clear of the forwards row + markings). */}
+          {!narrow && (
+            <div style={{ position: "absolute", top: 10, right: 10, zIndex: 5 }}>
+              <FormationPicker holding={holding} value={formationName} onChange={switchFormation} />
+            </div>
+          )}
           {narrow
             ? <LineBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} placing={picking && picking.card} moving={picking && (picking.mode === "move" || picking.mode === "relocate")} pending={picking && picking.pending} w={w} />
-            : <PitchBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} placing={picking && picking.card} moving={picking && (picking.mode === "move" || picking.mode === "relocate")} pending={picking && picking.pending} />}
+            : <PitchBoard formation={formation} seating={seating} pickSpotIds={pickSpotIds} effById={effById} kindById={kindById} onSpot={handleSpot} onPlacedTap={picking ? null : openMove} diehard={diehard} />}
+          {/* Desktop: the "placing" banner sits BELOW the pitch (clear of the top-right formation
+              picker), rather than overlaid on the pitch's top edge where it collided. */}
+          {!narrow && picking && picking.card && (
+            <div style={{ marginTop: 10 }}>
+              <PlacingBanner card={picking.card} diehard={diehard} moving={picking.mode === "move" || picking.mode === "relocate"} pending={picking.pending} />
+            </div>
+          )}
           <div style={{ fontFamily: "Inter, monospace", fontSize: 11, color: C.chalk, opacity: 0.6, marginTop: 8, textAlign: "center" }}>
             {t("draft.placedCount", { n: placed.length })}
           </div>
@@ -341,10 +374,15 @@ export default function Draft({ config, onComplete, onExit }) {
 
 /* ---------- Formation dropdown ---------- */
 function FormationPicker({ holding, value, onChange }) {
+  // A native <select> auto-sizes to its WIDEST option ("4-2-3-1"), so a 3-number shape
+  // like "4-3-3" would still get that wide box. Set an explicit width from the SELECTED
+  // value's length so the button stays snug for the common three-row shapes and only grows
+  // for the longer "4-2-3-1". (+44px covers padding + the dropdown arrow.)
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={{
       fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 14, color: C.ink,
       background: C.gold, border: "none", borderRadius: 5, padding: "8px 12px", cursor: "pointer",
+      width: `calc(${value.length}ch + 44px)`,
     }}>
       {holding.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
     </select>
@@ -355,7 +393,7 @@ function FormationPicker({ holding, value, onChange }) {
 // Conventional single-team lineup view: the XI attacks UP, so the halfway line + center circle sit
 // at the TOP (the attacking edge, just above the forwards) and the penalty area is at the BOTTOM
 // around the keeper. A line color reused for all markings.
-function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot, onPlacedTap, diehard, placing, moving, pending }) {
+function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot, onPlacedTap, diehard }) {
   const ln = `1px solid ${C.pitchLine}`;
   return (
     <div style={{
@@ -372,8 +410,6 @@ function PitchBoard({ formation, seating, pickSpotIds, effById, kindById, onSpot
       {/* penalty arc (the "D") — an upward-bulging semicircle on top of the box; its lower half is
           clipped by the board's overflow:hidden via the negative offset trick (only the cap shows) */}
       <div style={{ position: "absolute", left: "50%", bottom: "17%", width: "20%", height: "10%", transform: "translateX(-50%)", borderTop: ln, borderLeft: ln, borderRight: ln, borderRadius: "60px 60px 0 0" }} />
-
-      {placing && <PlacingBanner card={placing} diehard={diehard} moving={moving} pending={pending} overlay />}
 
       {formation.slots.map((slot) => (
         <div key={slot.id} style={{ position: "absolute", left: `${slot.x * 100}%`, top: `${slot.y * 100}%`, transform: "translate(-50%,-50%)", zIndex: 2 }}>
@@ -419,9 +455,10 @@ function SlotChip({ slot, card, highlight, eff, kind, onSpot, onPlacedTap, dieha
   };
   if (highlight) {
     // "current" = where the player being moved sits now (gold, not a move target — tapping cancels);
+    // "swap" = an occupied slot whose player can trade places with the mover -> blue;
     // "bump" = an occupied slot he can take (the incumbent re-seats) -> yellow; "open" = empty -> green.
-    const hl = kind === "current" ? C.gold : kind === "bump" ? C.yellow : C.green;
-    const bg = kind === "current" ? "rgba(212,175,55,.25)" : kind === "bump" ? "rgba(245,200,66,.20)" : "rgba(61,220,132,.22)";
+    const hl = kind === "current" ? C.gold : kind === "swap" ? "#5ab1ff" : kind === "bump" ? C.yellow : C.green;
+    const bg = kind === "current" ? "rgba(212,175,55,.25)" : kind === "swap" ? "rgba(90,177,255,.20)" : kind === "bump" ? "rgba(245,200,66,.20)" : "rgba(61,220,132,.22)";
     return (
       <button onClick={() => onSpot(slot)} style={{ ...base, cursor: "pointer", background: bg, border: `2px solid ${hl}`, color: C.chalk }}>
         {card ? (
@@ -474,9 +511,9 @@ function OfferPanel({ reel, spinning, offer, respins, onRespinCountry, onRespinY
   else cards.sort((a, b) => b.wc_rating - a.wc_rating);
 
   const is2026 = era === "2026";
-  const noRespins = respins.team <= 0 && (is2026 || respins.year <= 0);
-  const countryDisabled = spinning || respins.team <= 0 || !canCountry;
-  const yearDisabled = spinning || respins.year <= 0 || !canYear;
+  const noRespins = respins <= 0;
+  const countryDisabled = spinning || respins <= 0 || !canCountry;
+  const yearDisabled = spinning || respins <= 0 || !canYear;
 
   return (
     <div style={{ background: "rgba(0,0,0,.28)", border: `1px solid ${C.pitchLine}`, borderRadius: 10, padding: 14 }}>
@@ -486,17 +523,21 @@ function OfferPanel({ reel, spinning, offer, respins, onRespinCountry, onRespinY
         {!is2026 && reel.year !== "" && <ReelBox label={String(reel.year)} />}
       </div>
 
-      {/* Per-axis respins: country always; year only when the era draws a year. In the 2026 era there
-          is no year axis, so the single button reads "SPIN AGAIN" instead of "RESPIN COUNTRY". */}
+      {/* Shared respin pool spendable on either axis (one at a time). Country always; year only when
+          the era draws a year. In the 2026 era there is no year axis, so the single button reads
+          "SPIN AGAIN" instead of "RESPIN COUNTRY". The remaining count is shown once, below. */}
       <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 12, flexWrap: "wrap" }}>
         <button onClick={onRespinCountry} disabled={countryDisabled} style={{ ...actionBtn, opacity: countryDisabled ? 0.4 : 1, cursor: countryDisabled ? "default" : "pointer" }}>
-          {is2026 ? t("action.spinAgain") : t("draft.respinCountry")} ({respins.team})
+          {is2026 ? t("action.spinAgain") : t("draft.respinCountry")}
         </button>
         {!is2026 && (
           <button onClick={onRespinYear} disabled={yearDisabled} style={{ ...actionBtn, opacity: yearDisabled ? 0.4 : 1, cursor: yearDisabled ? "default" : "pointer" }}>
-            {t("draft.respinYear")} ({respins.year})
+            {t("draft.respinYear")}
           </button>
         )}
+      </div>
+      <div style={{ textAlign: "center", fontFamily: "Inter, sans-serif", fontSize: 12, color: C.gold, opacity: 0.85, marginTop: 8 }}>
+        {t("draft.respinsLeft", { n: respins })}
       </div>
       <div style={{ textAlign: "center", fontFamily: "Inter, sans-serif", fontSize: 11.5, color: C.chalk, opacity: 0.7, marginTop: 8 }}>
         {picking ? t("draft.pickSpot") : noRespins ? t("draft.mustCommit") : t("draft.tapPlayer")}
