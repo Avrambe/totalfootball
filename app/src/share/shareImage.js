@@ -11,7 +11,7 @@ import { t, tierName, tierPhrase } from "../i18n/index.js";
 
 // Flip to false to drop flags from the card if they read too busy (trivial removal, per the user).
 const FLAGS_ON_CARD = true;
-const SHARE_URL = ""; // no domain yet; footer degrades gracefully
+const SHARE_URL = "perfectxi.io"; // shown on the card footer
 
 function drawPill(ctx, cx, y, text, bg, fg, font) {
   ctx.font = font;

@@ -5,7 +5,7 @@ import { generateShareImage } from "./shareImage.js";
 
 // Share overlay: generates the result-card PNG on open, then offers the proven 162-0 share chain —
 // native share (with image) → copy image to clipboard → download → text-only social links.
-const SHARE_URL = ""; // no domain yet; text links degrade gracefully when empty
+const SHARE_URL = "https://perfectxi.io"; // live site; appended to shared text + social links
 
 export default function Share({ result, seating, formationName, config, onClose }) {
   const [imgBlob, setImgBlob] = useState(null);
@@ -44,7 +44,7 @@ export default function Share({ result, seating, formationName, config, onClose 
 
   const native = async () => {
     try {
-      if (imgBlob && canFiles) await navigator.share({ text, url: SHARE_URL || undefined, files: [new File([imgBlob], "total-football.png", { type: "image/png" })] });
+      if (imgBlob && canFiles) await navigator.share({ text, url: SHARE_URL || undefined, files: [new File([imgBlob], "perfect-xi.png", { type: "image/png" })] });
       else await navigator.share({ text, url: SHARE_URL || undefined });
     } catch (e) {}
   };
@@ -58,7 +58,7 @@ export default function Share({ result, seating, formationName, config, onClose 
   const saveImg = () => {
     if (!imgBlob) return;
     const url = imgUrl || URL.createObjectURL(imgBlob);
-    const a = document.createElement("a"); a.href = url; a.download = "total-football.png";
+    const a = document.createElement("a"); a.href = url; a.download = "perfect-xi.png";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setImgSaved(true); setTimeout(() => setImgSaved(false), 1500);
   };
