@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { C } from "../theme.js";
 import Flag from "./Flag.jsx";
-import { lastName } from "../util/name.js";
 import { getFormation } from "../positions/formations.js";
 
 // Read-only pitch for the Result screen: shows the XI you drafted. Mirrors the draft board's markings
@@ -65,7 +64,7 @@ function LineView({ formation, seating, diehard }) {
 function Chip({ slot, card, diehard }) {
   const base = {
     width: 78, minHeight: 46, borderRadius: 6, padding: "5px 6px",
-    fontFamily: "Oswald, sans-serif", textAlign: "center",
+    fontFamily: "Inter, sans-serif", textAlign: "center",
     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     background: "rgba(0,0,0,.35)", border: `1px solid ${C.pitchLine}`, color: C.chalk,
   };
@@ -75,7 +74,10 @@ function Chip({ slot, card, diehard }) {
   return (
     <div style={base}>
       <div style={{ fontSize: 10, opacity: 0.7, fontWeight: 700 }}>{slot.token}</div>
-      <div style={{ fontSize: 11.5, lineHeight: 1.15, fontWeight: 600 }}>{lastName(card.name)}</div>
+      <div style={{
+        fontSize: 11, lineHeight: 1.15, fontWeight: 600, maxWidth: "100%",
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+      }}>{card.name}</div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: 9.5, opacity: 0.75 }}>
         <Flag code={card.team_code} h={10} />
         {!diehard && <span>{card.wc_rating}</span>}

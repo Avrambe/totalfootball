@@ -8,7 +8,7 @@ export default function Flag({ code, h = 14, title, style }) {
   const [err, setErr] = useState(false);
   if (!code || err) {
     return (
-      <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: h * 0.72, color: C.chalk, opacity: 0.75, ...style }}>
+      <span style={{ fontFamily: "Inter, monospace", fontSize: h * 0.72, color: C.chalk, opacity: 0.75, ...style }}>
         {code || ""}
       </span>
     );

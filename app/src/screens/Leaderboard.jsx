@@ -32,7 +32,7 @@ export default function Leaderboard({ onBack, initial }) {
 
       <div style={{ width: "100%", maxWidth: 480, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={onBack} style={ghostBtn}>{`‹ ${t("action.menu")}`}</button>
-        <div style={{ fontFamily: "Anton, sans-serif", fontSize: 30, color: C.gold, letterSpacing: ".02em" }}>
+        <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, color: C.gold, letterSpacing: ".02em" }}>
           {t("action.leaderboard")}
         </div>
         <div style={{ width: 64 }} />
@@ -53,7 +53,7 @@ export default function Leaderboard({ onBack, initial }) {
             {rows.map((row, i) => (
               <Row key={i} rank={i + 1} row={row} onView={() => setView(row)} />
             ))}
-            <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 11, color: C.chalk, opacity: 0.5, textAlign: "center", marginTop: 10 }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: C.chalk, opacity: 0.5, textAlign: "center", marginTop: 10 }}>
               {t("leaderboard.tapToView")}
             </div>
           </>
@@ -72,7 +72,7 @@ function TabRow({ items, active, onPick, color }) {
         const on = active === k;
         return (
           <button key={k} onClick={() => onPick(k)} style={{
-            flex: 1, cursor: "pointer", fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 12.5,
+            flex: 1, cursor: "pointer", fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 12.5,
             padding: "8px 4px", borderRadius: 5, border: `1px solid ${color}`,
             background: on ? color : "transparent", color: on ? C.ink : C.chalk,
           }}>{lbl}</button>
@@ -91,14 +91,14 @@ function Row({ rank, row, onView }) {
       background: top ? "rgba(233,196,106,.12)" : "rgba(255,255,255,.05)",
       border: `1px solid ${top ? C.gold : C.pitchLine}`,
     }}>
-      <span style={{ fontFamily: "Anton, sans-serif", fontSize: 18, width: 26, flexShrink: 0, color: top ? C.gold : C.chalk }}>{rank}</span>
+      <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, width: 26, flexShrink: 0, color: top ? C.gold : C.chalk }}>{rank}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 15, color: C.chalk, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</span>
-        <span style={{ display: "block", fontFamily: "Oswald, sans-serif", fontSize: 11.5, color: C.chalk, opacity: 0.6 }}>
+        <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 15, color: C.chalk, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</span>
+        <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 11.5, color: C.chalk, opacity: 0.6 }}>
           {row.tier}{row.grade ? ` · ${row.grade}` : ""}
         </span>
       </span>
-      <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.gold, flexShrink: 0 }}>{row.elo}</span>
+      <span style={{ fontFamily: "Inter, monospace", fontSize: 16, fontWeight: 700, color: C.gold, flexShrink: 0 }}>{row.elo}</span>
     </button>
   );
 }
@@ -111,8 +111,8 @@ function SquadViewer({ row, diehard, onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.pitchDeep, border: `1px solid ${C.pitchLine}`, borderRadius: 12, padding: 16, width: "100%", maxWidth: 460 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: "Anton, sans-serif", fontSize: 20, color: C.gold, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</div>
-            <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, color: C.chalk, opacity: 0.7 }}>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: C.gold, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: C.chalk, opacity: 0.7 }}>
               {row.tier}{row.grade ? ` · ${row.grade}` : ""} · Elo {row.elo}
             </div>
           </div>
@@ -127,7 +127,7 @@ function SquadViewer({ row, diehard, onClose }) {
 }
 
 function Msg({ text, color }) {
-  return <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 13, color: color || C.chalk, opacity: color ? 1 : 0.7, textAlign: "center", padding: 28 }}>{text}</div>;
+  return <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: color || C.chalk, opacity: color ? 1 : 0.7, textAlign: "center", padding: 28 }}>{text}</div>;
 }
 
-const ghostBtn = { fontFamily: "Oswald, sans-serif", fontSize: 13, color: C.chalk, background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "7px 14px", cursor: "pointer" };
+const ghostBtn = { fontFamily: "Inter, sans-serif", fontSize: 13, color: C.chalk, background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "7px 14px", cursor: "pointer" };

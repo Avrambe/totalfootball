@@ -7,12 +7,14 @@ import { canPlay } from "../positions/canPlay.js";
 import { quality } from "./squad.js";
 import { runBracket } from "./bracket.js";
 import { scoreTournament } from "../scoring/score.js";
+import { applyStyle, DEFAULT_STYLE } from "./style.js";
 
 export { opponentPool } from "./bracket.js";
 export { quality } from "./squad.js";
 
 // seating: { [slotId]: card }. formationName: the chosen shape. era: "2026" | "modern" | "alltime".
-export function runTournament(seating, formationName, era, rng = Math.random) {
+// styleKey: the post-draft playing style (one of STYLES in ./style.js; defaults to "balanced").
+export function runTournament(seating, formationName, era, styleKey = DEFAULT_STYLE, rng = Math.random) {
   const formation = getFormation(formationName);
   const slotById = new Map(formation.slots.map((s) => [s.id, s]));
   const cards = Object.values(seating);
@@ -25,6 +27,7 @@ export function runTournament(seating, formationName, era, rng = Math.random) {
   }
 
   const q = quality(cards, (c) => effById.get(c.player_id) ?? 1);
-  const result = runBracket({ quality: q }, era, rng);
-  return { ...result, ...scoreTournament(result), formationName };
+  const styled = applyStyle(q, seating, formationName, styleKey);
+  const result = runBracket({ quality: styled, style: styleKey }, era, rng);
+  return { ...result, ...scoreTournament(result), formationName, style: styleKey };
 }

@@ -82,6 +82,19 @@ export function teamsInYear(era, year) {
   return [...new Set(eraSquads(era).filter((s) => s.year === year).map((s) => s.name))];
 }
 
+// Distinct {name, code} squads that fielded in `year` — used so the tumbling team axis can show the
+// country's flag (the code) alongside the name during the spin, not just after it settles.
+export function squadsInYear(era, year) {
+  const seen = new Set();
+  const out = [];
+  for (const s of eraSquads(era)) {
+    if (s.year !== year || seen.has(s.teamCode)) continue;
+    seen.add(s.teamCode);
+    out.push({ name: s.name, code: s.teamCode });
+  }
+  return out;
+}
+
 // Years `teamCode` actually fielded a squad in (era-filtered, ascending).
 export function yearsForTeam(era, teamCode) {
   return [...new Set(eraSquads(era).filter((s) => s.teamCode === teamCode).map((s) => s.year))].sort((a, b) => a - b);
@@ -95,21 +108,21 @@ export function yearsForTeam(era, teamCode) {
 // name, year }; `axes` = { team, year }; `count` = number of tumble frames before the final snap.
 export function reelFrames(era, target, axes, count) {
   const frames = [];
-  const teamPool = teamsInYear(era, target.year); // teams valid for the settled year
+  const teamPool = squadsInYear(era, target.year); // {name, code} valid for the settled year
   if (axes.team && axes.year) {
     const all = eraSquads(era);
     const yLock = Math.max(1, Math.round(count * 0.6)); // year locks first; team runs on after
     for (let i = 0; i < count; i++) {
-      if (i < yLock) { const sq = pickRand(all); frames.push({ team: sq.name, year: sq.year }); }
-      else frames.push({ team: pickRand(teamPool), year: target.year });
+      if (i < yLock) { const sq = pickRand(all); frames.push({ team: sq.name, year: sq.year, code: sq.teamCode }); }
+      else { const sq = pickRand(teamPool); frames.push({ team: sq.name, year: target.year, code: sq.code }); }
     }
   } else if (axes.team) {
-    for (let i = 0; i < count; i++) frames.push({ team: pickRand(teamPool), year: target.year });
+    for (let i = 0; i < count; i++) { const sq = pickRand(teamPool); frames.push({ team: sq.name, year: target.year, code: sq.code }); }
   } else if (axes.year) {
     const yearPool = yearsForTeam(era, target.teamCode);
-    for (let i = 0; i < count; i++) frames.push({ team: target.name, year: pickRand(yearPool) });
+    for (let i = 0; i < count; i++) frames.push({ team: target.name, year: pickRand(yearPool), code: target.teamCode });
   } else {
-    for (let i = 0; i < count; i++) frames.push({ team: target.name, year: target.year });
+    for (let i = 0; i < count; i++) frames.push({ team: target.name, year: target.year, code: target.teamCode });
   }
   return frames;
 }

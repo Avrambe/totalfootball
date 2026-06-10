@@ -4,9 +4,45 @@
 
 import { GAME } from "../data/loader.js";
 import { eraSquads } from "../spin/pools.js";
-import { opponentQuality } from "./squad.js";
+import { opponentQuality, bestXI } from "./squad.js";
 import { playMatch } from "./match.js";
+import { getFormation, DEFAULT_FORMATION } from "../positions/formations.js";
+import { deriveStyle, matchupMultiplier, fieldMatchup } from "./style.js";
 import { GROUP_SIZE, GROUPS, THIRDS_ADVANCE, KO_ROUNDS, ELO_BANDS } from "./params.js";
+
+// An opponent's emergent style: seat its best XI into a 4-3-3 (slot order GK/4DF/3MF/3FW matches the
+// bestXI return order) and ask which non-balanced style that shape fits best. No hand-authored data.
+function emergentStyle(teamCode, year) {
+  const xi = bestXI(teamCode, year);
+  if (!xi) return "balanced";
+  const f = getFormation(DEFAULT_FORMATION);
+  const seating = {};
+  f.slots.forEach((s, i) => { if (xi[i]) seating[s.id] = xi[i]; });
+  return deriveStyle(seating, DEFAULT_FORMATION);
+}
+
+// Mutual matchup: scale each side's quality by how its style fares against the other's. Returns fresh
+// copies (never mutate the cached pool quality). `mfn` is the FIELD-CENTERED matchup fn for the era
+// (nets to 1.0 across the opponent field); defaults to the raw pairwise multiplier.
+function adjustForMatchup(qA, styleA, qB, styleB, mfn = matchupMultiplier) {
+  const mA = mfn(styleA || "balanced", styleB || "balanced");
+  const mB = mfn(styleB || "balanced", styleA || "balanced");
+  return [
+    { attack: qA.attack * mA, defense: qA.defense * mA },
+    { attack: qB.attack * mB, defense: qB.defense * mB },
+  ];
+}
+
+// The era's field-centered matchup fn, built once from the opponent pool's emergent-style frequencies.
+const _matchupCache = new Map();
+function fieldMatchupFor(era) {
+  if (_matchupCache.has(era)) return _matchupCache.get(era);
+  const counts = {};
+  for (const o of opponentPool(era)) counts[o.style] = (counts[o.style] || 0) + 1;
+  const fn = fieldMatchup(counts);
+  _matchupCache.set(era, fn);
+  return fn;
+}
 
 const TIER_ON_LOSS = {
   "Round of 32": "Round of 32",
@@ -27,7 +63,7 @@ export function opponentPool(era) {
     if (elo == null) continue;
     const q = opponentQuality(sq.teamCode, sq.year);
     if (!q) continue;
-    out.push({ teamCode: sq.teamCode, year: sq.year, name: sq.name, elo, quality: q });
+    out.push({ teamCode: sq.teamCode, year: sq.year, name: sq.name, elo, quality: q, style: emergentStyle(sq.teamCode, sq.year) });
   }
   out.sort((a, b) => a.elo - b.elo);
   // strength = Elo percentile in the era's field (0..1); the scoring module weights match Elo by it.
@@ -49,22 +85,25 @@ function draw(pool, band, used, rng) {
   return choice;
 }
 
-function record(you, opp, opts) {
-  const r = playMatch(you.quality, opp.quality, opts);
+function record(you, opp, opts, mfn) {
+  const [qy, qo] = adjustForMatchup(you.quality, you.style, opp.quality, opp.style, mfn);
+  const r = playMatch(qy, qo, opts);
   return {
     opponent: { teamCode: opp.teamCode, year: opp.year, name: opp.name }, oppStrength: opp.strength,
+    oppStyle: opp.style || "balanced",
     you: r.gf, opp: r.ga, scoreline: `${r.gf}-${r.ga}`, won: r.won, decidedBy: r.decidedBy,
   };
 }
 
 // Play a 4-team round-robin. Returns { ranked, matches }: `ranked` is the standings (pts → gd → gf),
 // `matches` records each result as {i,j,gf,ga} (gf/ga from team i's view) for callers that need detail.
-function playGroup(teams, rng) {
+function playGroup(teams, rng, mfn) {
   const table = new Map(teams.map((t) => [t.key, { pts: 0, gf: 0, ga: 0 }]));
   const matches = [];
   for (let i = 0; i < teams.length; i++) {
     for (let j = i + 1; j < teams.length; j++) {
-      const r = playMatch(teams[i].quality, teams[j].quality, { rng });
+      const [qi, qj] = adjustForMatchup(teams[i].quality, teams[i].style, teams[j].quality, teams[j].style, mfn);
+      const r = playMatch(qi, qj, { rng });
       const ta = table.get(teams[i].key), tb = table.get(teams[j].key);
       ta.gf += r.gf; ta.ga += r.ga; tb.gf += r.ga; tb.ga += r.gf;
       if (r.gf > r.ga) ta.pts += 3; else if (r.gf < r.ga) tb.pts += 3; else { ta.pts += 1; tb.pts += 1; }
@@ -80,11 +119,12 @@ function playGroup(teams, rng) {
 // Is record A strictly better than B by the standings order (pts → gd → gf)?
 const betterThird = (a, b) => a.pts > b.pts || (a.pts === b.pts && a.gd > b.gd) || (a.pts === b.pts && a.gd === b.gd && a.gf > b.gf);
 
-// Run a full tournament for a drafted squad. `you` = { quality:{attack,defense} }.
+// Run a full tournament for a drafted squad. `you` = { quality:{attack,defense}, style }.
 // Real 2026 format: 12 groups of 4; top 2 of each group + the 8 best third-place teams advance to a
 // 32-team knockout. We simulate all 12 groups so the third-place cut reflects the actual field.
 export function runBracket(you, era, rng = Math.random) {
   const pool = opponentPool(era);
+  const mfn = fieldMatchupFor(era); // field-centered style matchup (net-zero edge across the field)
   const used = new Set();        // teams YOU encounter (group opponents + knockout), kept distinct
   const oppMeta = (o) => ({ teamCode: o.teamCode, year: o.year, name: o.name });
 
@@ -96,18 +136,19 @@ export function runBracket(you, era, rng = Math.random) {
   // --- Your group: you + (GROUP_SIZE-1) drawn opponents, full round-robin. ---
   const groupOpps = [];
   for (let i = 0; i < GROUP_SIZE - 1; i++) groupOpps.push(draw(pool, ELO_BANDS.group, used, rng));
-  const myTeams = [{ key: "you", quality: you.quality }, ...groupOpps.map((o, i) => ({ key: i, quality: o.quality }))];
-  const myGroup = playGroup(myTeams, rng);
+  const myTeams = [{ key: "you", quality: you.quality, style: you.style },
+    ...groupOpps.map((o, i) => ({ key: i, quality: o.quality, style: o.style }))];
+  const myGroup = playGroup(myTeams, rng, mfn);
 
   // Your 3 group matches, reconstructed from the simulated results (not re-rolled).
   const yourMatches = [];
   for (const m of myGroup.matches) {
     if (myTeams[m.i].key === "you") { const o = groupOpps[myTeams[m.j].key]; yourMatches.push({
-      opponent: oppMeta(o), oppStrength: o.strength,
+      opponent: oppMeta(o), oppStrength: o.strength, oppStyle: o.style || "balanced",
       you: m.gf, opp: m.ga, scoreline: `${m.gf}-${m.ga}`, won: m.gf > m.ga, decidedBy: "normal",
     }); }
     else if (myTeams[m.j].key === "you") { const o = groupOpps[myTeams[m.i].key]; yourMatches.push({
-      opponent: oppMeta(o), oppStrength: o.strength,
+      opponent: oppMeta(o), oppStrength: o.strength, oppStyle: o.style || "balanced",
       you: m.ga, opp: m.gf, scoreline: `${m.ga}-${m.gf}`, won: m.ga > m.gf, decidedBy: "normal",
     }); }
   }
@@ -122,8 +163,8 @@ export function runBracket(you, era, rng = Math.random) {
   for (let g = 1; g < groupsFormed; g++) {
     const localUsed = new Set();
     const gt = [];
-    for (let k = 0; k < GROUP_SIZE; k++) gt.push({ key: k, quality: draw(pool, ELO_BANDS.group, localUsed, rng).quality });
-    otherThirds.push(playGroup(gt, rng).ranked[2]);
+    for (let k = 0; k < GROUP_SIZE; k++) { const d = draw(pool, ELO_BANDS.group, localUsed, rng); gt.push({ key: k, quality: d.quality, style: d.style }); }
+    otherThirds.push(playGroup(gt, rng, mfn).ranked[2]);
   }
 
   // Advancement: top two always; third place only if within the best `thirdsQuota` third-place records.
@@ -148,7 +189,7 @@ export function runBracket(you, era, rng = Math.random) {
   let tier = "Champions";
   for (const round of KO_ROUNDS) {
     const opp = draw(pool, ELO_BANDS[round], used, rng);
-    const m = record(you, opp, { knockout: true, rng });
+    const m = record(you, opp, { knockout: true, rng }, mfn);
     m.round = round;
     knockout.push(m);
     goalsFor += m.you; goalsAgainst += m.opp;

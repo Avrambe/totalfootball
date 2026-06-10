@@ -14,22 +14,22 @@ export default function Title({ lang, onSetLang, onStart, onLeaderboard }) {
     <div style={{ ...splash, justifyContent: "flex-start", paddingTop: "8vh", paddingBottom: 40 }}>
       <style>{FONTS}</style>
       {onSetLang && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", marginBottom: 18, padding: "0 16px" }}>
-          {LOCALES.map((loc) => (
-            <button key={loc} onClick={() => onSetLang(loc)} style={{
-              cursor: "pointer", fontFamily: "Oswald, sans-serif", fontSize: 12, fontWeight: 600,
-              color: lang === loc ? C.ink : C.chalk,
-              background: lang === loc ? C.gold : "rgba(255,255,255,.06)",
-              border: lang === loc ? `1px solid ${C.gold}` : "1px solid rgba(255,255,255,.18)",
-              borderRadius: 5, padding: "5px 11px",
-            }}>{ENDONYM[loc] || loc}</button>
-          ))}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, padding: "0 16px" }}>
+          <select value={lang} onChange={(e) => onSetLang(e.target.value)} style={{
+            cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600,
+            color: C.chalk, background: "rgba(255,255,255,.06)",
+            border: "1px solid rgba(255,255,255,.2)", borderRadius: 5, padding: "6px 12px",
+          }}>
+            {LOCALES.map((loc) => (
+              <option key={loc} value={loc} style={{ color: C.ink }}>{ENDONYM[loc] || loc}</option>
+            ))}
+          </select>
         </div>
       )}
-      <div style={{ fontFamily: "Anton, sans-serif", fontSize: 58, color: C.gold, letterSpacing: ".02em", textAlign: "center" }}>
+      <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 58, color: C.gold, letterSpacing: ".02em", textAlign: "center" }}>
         {t("app.title").toUpperCase()}
       </div>
-      <div style={{ fontFamily: "Oswald, sans-serif", marginTop: 8, fontSize: 15, color: C.chalk, opacity: 0.8, textAlign: "center", maxWidth: 420, padding: "0 20px" }}>
+      <div style={{ fontFamily: "Inter, sans-serif", marginTop: 8, fontSize: 15, color: C.chalk, opacity: 0.8, textAlign: "center", maxWidth: 420, padding: "0 20px" }}>
         {t("app.tagline")}
       </div>
 
@@ -58,7 +58,7 @@ export default function Title({ lang, onSetLang, onStart, onLeaderboard }) {
 function Section({ label, children }) {
   return (
     <div style={{ marginTop: 28, width: "100%", maxWidth: 720, padding: "0 16px" }}>
-      <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 12, letterSpacing: ".25em", color: C.chalk, opacity: 0.55, marginBottom: 10 }}>{label}</div>
+      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, letterSpacing: ".25em", color: C.chalk, opacity: 0.55, marginBottom: 10 }}>{label}</div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{children}</div>
     </div>
   );
@@ -73,22 +73,22 @@ function Card({ active, onClick, title, desc }) {
       border: active ? `1px solid ${C.gold}` : "1px solid rgba(255,255,255,.2)",
       borderRadius: 6, padding: "12px 14px", transition: "all .12s",
     }}>
-      <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 17 }}>{title}</div>
-      <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 12.5, opacity: active ? 0.8 : 0.65, marginTop: 3 }}>{desc}</div>
+      <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 17 }}>{title}</div>
+      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, opacity: active ? 0.8 : 0.65, marginTop: 3 }}>{desc}</div>
     </button>
   );
 }
 
 const playBtn = {
   marginTop: 34, cursor: "pointer",
-  fontFamily: "Anton, sans-serif", fontSize: 22, letterSpacing: ".08em",
+  fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: ".08em",
   color: C.ink, background: C.green, border: "none", borderRadius: 6,
   padding: "14px 48px",
 };
 
 const lbBtn = {
   marginTop: 14, cursor: "pointer",
-  fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: ".06em",
+  fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: ".06em",
   color: C.chalk, background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)",
   borderRadius: 6, padding: "11px 30px",
 };

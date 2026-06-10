@@ -90,10 +90,17 @@ acted as a weak floor. Replaced with a **three-signal MAX** in `pipeline/rating/
   variance two-goal striker on a strong team is NOT lifted. This is the user's Zidane-2006 refinement
   (Golden Ball → 95 despite a past-peak award standing).
 - **Capped WC-performance** — the Layer-P composite × age factor, normalized within position, then
-  CAPPED: ≤79 where the player had a real **award opportunity** (so non-listed role-players settle
+  soft-capped: ≤79 where the player had a real **award opportunity** (so non-listed role-players settle
   "very good"), ≤95 in **award-less profiles** (`year<1956` OR `year<1995 and team not in UEFA` — the
   Euro-only Ballon d'Or era) so early-era greats still reach the elite band. `UEFA` set + `_perf_cap`
-  + `_honor_floor` live in combine.py.
+  + `_honor_floor` live in combine.py. **Phase Ratings-fix (2026-06-09): the cap is now a soft knee
+  ramp, not a hard `min()` clamp.** The old hard clamp collapsed the whole top tail of every position
+  onto the cap value — **1,483 historical cards landed on exactly 79** (75–79 band held 17.5% of the
+  cohort). `_soft_cap(perf, cap)` (KNEE_WIDTH=16) keeps scores at/below `knee = cap−16` at their exact
+  value (no median shift) and squeezes the tail [knee, 99] into [knee, cap], so the spike dissolves into
+  a smooth ramp. Result: the 70–79 lump is gone; both cohorts now ramp smoothly (peak ~9–10% at 65–69).
+  Because the 2026 composite tier quantile-matches to this historical distribution, **2026 de-clustered
+  for free** (no `_calibrate` change needed). Anchor/honor tiers and all named sanity anchors unchanged.
 Results: historical 98+ collapsed 170→46 (99: 30), ~2–4 per tournament and all genuine greats
 (1990 Maradona/van Basten/Gullit/Matthäus; 2018 Messi/Ronaldo/Lewandowski/Modrić). 2022 Argentina now
 reads Messi 99 / E. Martínez 92 (Golden Glove) / Álvarez+Lautaro 89 / Enzo 88 (Best Young Player) /
@@ -322,6 +329,67 @@ subtitle/mode-pill ("CLASSICA")/tier/Elo/differential/tagline with accented glyp
 sentence is now fully Italian with no English leak. `npm run build` clean; all 4 node verify suites still
 pass (positions 24/24, draft 30/30, engine 16/16, scoring 11/11). Out of scope (later): native-speaker
 translation review; an in-Draft/Result switcher (Title-only is enough now). Next: Phase 11 (Capacitor/iOS).
+
+Phase Style (playing styles — a real pre-tournament skill choice): after drafting the XI the player
+picks a **playing style** (`Style.jsx`, a dropdown) that modestly shifts match strength. All logic +
+magnitudes live in `app/src/engine/style.js`. Eight options: **Balanced** (true no-op default) +
+**possession, counter, press, direct, wing, total, positional** (Park the Bus was dropped — it could
+never win in a format where you must *win* knockout games). Three bounded levers, deliberately small
+("style is seasoning, roster quality is the meal" — the goal model applies exp(STEEP·Δ) with STEEP≈6.3,
+so a few-percent shift already moves outcomes): **(1) squad-fit** ±SQUAD_CAP (0.025) — how well your XI's
+ratings sit at the SLOTS a style cares about (per-position weights `POS_WEIGHTS`, keyed off the slot a
+player occupies so it works for every era incl. bucket-only historical cards), plus formation
+compatibility (`FORMATION_FIT`); **(2) matchup tilt** ±MATCH_CAP (0.018) — your style vs the opponent's
+emergent style via an antisymmetric rock-paper-scissors matrix; **(3) age/stamina depressor** −STAMINA_CAP
+(0.02) on high-energy styles (press/total/wing) scaled by squad age. The fit boost is applied **equally to
+attack and defense** (a style that suits the squad makes the whole team click; a side-split would hand
+"both-sides" styles a structural edge unrelated to roster fit).
+
+**Phase Style-3 (the rework that made style selection a genuine skill):** play-testing showed only
+counter & press were ever the best pick. Diagnosed three root causes and fixed all: (1) removed the
+attack/defense SIDE split (the "both-sides" leak — boost is now two-way); (2) **field-centered the
+matchup** (`fieldMatchup(styleCounts)` in style.js, wired through `bracket.js`'s `fieldMatchupFor(era)` →
+`adjustForMatchup`): the raw matrix is zero-sum *pairwise* but the opponent field isn't uniform, so each
+style's multiplier is divided by its own field-average → nets to 1.0 across the field (you gain vs some
+opponents, lose vs others, **no standing edge** — flavor, not a free lunch); (3) **sharpened POS_WEIGHTS**
+so each style uniquely owns a slot-combination (possession owns CM+AM, positional owns CB+FB, press owns
+DM+W+ST, counter is wide+sharp-forwards, direct is narrow target-man, wing owns FB+W) — this de-correlated
+the "cousin" styles so two styles on a shared formation mutually penalize each other; and **redefined
+Total Football as an EVENNESS reward** (its `fitScore` branch rewards a TIGHT rating spread = no weak
+link, not a weighted-mean spike — a genuinely orthogonal niche: the deep, even squad wants Total, a spiky
+squad wants its matching spike style). **Acceptance test = `node app/src/engine/style_analysis.mjs`**: it
+builds a per-style "archetype" roster (strong exactly where that style's weights are high, equal budget,
+Total gets a FLAT squad) and runs every style on every archetype at N=8000 champion%. Result: **every
+style now wins its own archetype and none is never-best** (the "redundant → drop?" line is empty) — the
+user's exact bar. Calibration (`calibrate.mjs`) still holds §8 targets (near-perfect champion ~70%, median
+~11%, ~2.7 goals/match, frequent upsets) and the best-vs-worst-style swing on a fixed dream team stays
+single-digit (~6.5 champion-% pts). Opponent emergent styles are shown on the Result screen. All 4 verify
+suites pass (engine 28/28 incl. new directionality + field-centered-matchup asserts). Tuning constants
+(SQUAD_CAP/MATCH_CAP/STAMINA_CAP/W_FIT/W_FORM/REL_SCALE/REF_SPREAD/SPREAD_SCALE/POS_WEIGHTS) all live at
+the top of `style.js`.
+
+**Phase UX-4 (move placed players + readable narrow board):** two draft-board improvements, app-layer
+only. **(A) Manage a placed XI.** Tapping an already-placed player now opens a MOVE flow (gold "MOVING"
+banner): his **current** slot is highlighted gold with its effectiveness %, and every slot he could move
+to shows as green (`open` — empty & the rest still seat) or yellow (`bump` — occupied but the incumbent
+can be re-seated in his line); tapping the current slot cancels, tapping a target moves him (bumping a
+displaceable incumbent). Logic in `offer.js` `moveSpots(card, placed, formationName, pins)` (mirrors
+`placementSpots`, reuses canPlay/assign/seat). `picking` gained a `mode` ("place"|"move"); SlotChip's
+card branch is now a tappable `<button>` (`onPlacedTap`). **Least-degradation re-seat on formation
+change:** `bestLineup(placed, formationName, prevTokenById)` in offer.js runs a **Hungarian
+(Kuhn–Munkres) max-weight assignment** over canPlay effectiveness (ineligible = BIG cost; padded square
+with 0-cost dummies), with a small EPS continuity bonus when a candidate slot's token matches the
+player's previous token — so a formation switch keeps everyone at their best fit, ties break to the
+prior position, and two players contending for one spot resolve to the globally optimal lineup (the
+user can hand-edit after). `switchFormation` now calls `bestLineup`; manual picks still use the
+pin-honoring `seat`, so we only re-optimize on a formation *change*, not after every pick. **(B)
+Readable narrow board.** `LineBoard` chip width is computed from the widest band + viewport
+(GAP=5/OUTER=16/ROWPAD=12/MIN=50/MAX=78) with `flexWrap:"nowrap"`, so a back-five sits on ONE row, 5
+across (font shrinks below width 64); each band row is wrapped in a faint bordered box so formation
+lines read as units. Verify: `node app/src/draft/verify.mjs` (50/50 — added bestLineup-optimality,
+continuity-tiebreak, and moveSpots asserts) + `node app/src/positions/verify.mjs` (24/24). Confirmed
+live (iPhone 390×844): 5-4-1 back-five on one readable row; tapping KDB showed current CM 97% + move
+targets LM/RM 91%, move worked; 5-4-1→4-3-3 re-seated KDB RM(91% off-pos)→CM(97% natural).
 
 ## Working norms (user is non-technical)
 - Explain *why*, not just *what*; flag tradeoffs. Never commit/push without explicit instruction.

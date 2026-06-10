@@ -3,9 +3,11 @@
 
 import {
   seat, fitsFormation, holdingFormations, offerState, targetFormationsFor, validSpots, openLines,
+  placementSpots, samePerson, alreadyDrafted, bestLineup, moveSpots,
 } from "../formation/offer.js";
 import { reasonString } from "../formation/tighten.js";
 import { getFormation } from "../positions/formations.js";
+import { canPlay } from "../positions/canPlay.js";
 import { GAME } from "../data/loader.js";
 import { validTargets, canRespin, reelFrames } from "../spin/pools.js";
 
@@ -33,6 +35,22 @@ check("after 4 DF placed, a 5th DF is yellow in 4-3-3", offerState(card("DF"), f
 const five = many(5, "DF");
 check("after 5 DF, a 6th DF is grey (no shape holds 6)", offerState(card("DF"), five, "4-3-3") === "grey");
 
+console.log("== cross-era same-person dedup (offer.js samePerson/alreadyDrafted) ==");
+// Historical player_id is stable across years -> same id, already merged.
+const messi18 = { player_id: "P-14758", name: "Lionel Messi", position: "FW", eligible_positions: ["FW"] };
+const messi14 = { player_id: "P-14758", name: "Lionel Messi", position: "FW", eligible_positions: ["FW"] };
+check("same historical id (Messi 2018 vs 2014) -> samePerson", samePerson(messi18, messi14));
+check("Messi 2014 is alreadyDrafted once Messi 2018 is placed", alreadyDrafted(messi14, [messi18]));
+// 2026 cohort uses a different id scheme; bridge by normalized name when exactly one side is 2026.
+const messi26 = { player_id: "2026-ARG-lionel-messi", name: "Lionel Messi", position: "FW", eligible_positions: ["FW"] };
+check("2026 Messi matches historical Messi by name", samePerson(messi26, messi18));
+check("placing 2026 Messi greys the historical Messi (offerState)", offerState(messi18, [messi26], "4-3-3") === "grey");
+check("placing historical Messi greys the 2026 Messi (offerState)", offerState(messi26, [messi18], "4-3-3") === "grey");
+// Two genuinely-different historical people sharing a name (both P-…) must NOT be merged.
+const danilA = { player_id: "P-1001", name: "Danilo", position: "DF", eligible_positions: ["DF"] };
+const danilB = { player_id: "P-2002", name: "Danilo", position: "MF", eligible_positions: ["MF"] };
+check("two different historical 'Danilo' (both P-…) are NOT merged", !samePerson(danilA, danilB));
+
 console.log("== tightening ==");
 const holdAfter5 = holdingFormations(five).map((f) => f.name);
 check("5 DF placed -> only back-five shapes hold", holdAfter5.length > 0 && holdAfter5.every((n) => n.startsWith("5-")));
@@ -50,6 +68,85 @@ check("every returned spot is a DF-line slot", spots.every((sp) => sp.slot.line 
 const cbSpots = validSpots(card("DF", "CB"), [], "4-3-3");
 check("a CB specialist gets effectiveness 1.0 at a CB slot", cbSpots.some((sp) => sp.slot.token === "CB" && sp.effectiveness === 1.0));
 check("a CB specialist is still eligible (penalized) at a full-back slot", cbSpots.some((sp) => sp.slot.token !== "CB" && sp.effectiveness < 1.0));
+
+console.log("== placementSpots: filled slots stay placeable (bump the incumbent) ==");
+// One DF already placed in 4-3-3, then offer another DF. Open DF slots = bump-free (kind "open");
+// the slot the incumbent sits in should be offered as "bump" (he can re-seat in another DF slot).
+const oneDf = [card("DF")];
+const seated = seat(oneDf, getFormation("4-3-3"));
+const occupiedSlotId = Object.keys(seated)[0];
+const pSpots = placementSpots(card("DF"), oneDf, "4-3-3");
+check("a 2nd DF sees all 4 DF slots placeable", pSpots.length === 4);
+check("the occupied DF slot is offered as a bump", pSpots.some((sp) => sp.slot.id === occupiedSlotId && sp.kind === "bump"));
+check("the empty DF slots are offered as open", pSpots.filter((sp) => sp.kind === "open").length === 3);
+check("no MF/FW/GK slot is ever offered to a DF (cross-line stays impossible)",
+  pSpots.every((sp) => sp.slot.line === "DF"));
+// When the line is full AND a displaced incumbent has nowhere to go, the slot is NOT offered.
+const fourDf = many(4, "DF");
+const fullSpots = placementSpots(card("DF"), fourDf, "4-3-3");
+check("with all 4 DF slots full and no room to relocate, a 5th DF gets no DF spot", fullSpots.length === 0);
+
+// A bump must be reachable in a SINGLE move (the incumbent has an actually-open slot to take) — not
+// only via a multi-player reshuffle. 4-3-3: pin a DF/MF-versatile card + 2 pure MF in the 3 MF slots,
+// and 3 pure DF in 3 of 4 DF slots (1 DF slot open). Offer a pure MF. Only the versatile incumbent can
+// move (single-hop to the open DF slot); the 2 pure-MF incumbents are only multi-hop-displaceable, so
+// their slots must NOT be offered as bumps (the user's "only Le Kang-in's slot turns yellow" case).
+const f433 = getFormation("4-3-3");
+const dfS = f433.slots.filter((sl) => sl.line === "DF");
+const mfS = f433.slots.filter((sl) => sl.line === "MF");
+const versV = card("MF", "DF", "MF"); // eligible at both DF and MF lines
+const pm1 = card("MF"), pm2 = card("MF");
+const pd1 = card("DF"), pd2 = card("DF"), pd3 = card("DF");
+const placedMH = [versV, pm1, pm2, pd1, pd2, pd3];
+const pinsMH = new Map([
+  [versV.player_id, mfS[0].id], [pm1.player_id, mfS[1].id], [pm2.player_id, mfS[2].id],
+  [pd1.player_id, dfS[0].id], [pd2.player_id, dfS[1].id], [pd3.player_id, dfS[2].id],
+]);
+const mhSpots = placementSpots(card("MF"), placedMH, "4-3-3", pinsMH);
+check("single-hop bump: exactly ONE MF slot is a bump (the versatile incumbent's), not all 3",
+  mhSpots.filter((sp) => sp.kind === "bump").length === 1);
+check("single-hop bump: the bump is the slot the DF-capable midfielder occupies",
+  mhSpots.some((sp) => sp.kind === "bump" && sp.slot.id === mfS[0].id));
+
+console.log("== bestLineup: optimal (least-degradation) re-seat ==");
+function sumEff(seating, formationName) {
+  const f = getFormation(formationName);
+  let total = 0;
+  for (const [sid, c] of Object.entries(seating)) {
+    const slot = f.slots.find((sl) => sl.id === sid);
+    if (slot) total += canPlay(c, slot).effectiveness;
+  }
+  return total;
+}
+// An LB and an RB specialist: the only 2.0-total seating is LB->LB, RB->RB. A naive
+// matching can land one or both off-position; bestLineup must find the optimum.
+const lr = [card("DF", "LB"), card("DF", "RB")];
+const optLR = bestLineup(lr, "4-3-3");
+const naiveLR = seat(lr, getFormation("4-3-3"));
+check("bestLineup seats all placed cards", Object.keys(optLR).length === 2);
+check("bestLineup total effectiveness >= naive seat", sumEff(optLR, "4-3-3") >= sumEff(naiveLR, "4-3-3") - 1e-9);
+check("bestLineup achieves the optimal 2.0 (LB->LB, RB->RB)", Math.abs(sumEff(optLR, "4-3-3") - 2.0) < 1e-9);
+// Continuity tiebreak: a bucket MF is 1.0 at every MF slot (a tie); prevToken should
+// keep him on the matching token rather than an arbitrary MF slot.
+const cdmSlot = getFormation("4-3-3").slots.find((sl) => sl.token === "CDM");
+const cmCard = card("MF");
+const prevToken = new Map([[cmCard.player_id, "CDM"]]);
+const optCdm = bestLineup([cmCard], "4-3-3", prevToken);
+check("continuity tiebreak seats the card on its previous token (CDM)", optCdm[cdmSlot.id] && optCdm[cdmSlot.id].player_id === cmCard.player_id);
+
+console.log("== moveSpots: tap a placed player to move him ==");
+// 2 MF placed in 4-3-3 (3 MF slots). Move one: his slot = current, the other MF card's
+// slot = bump (incumbent can re-seat in the free MF slot), the empty MF slot = open.
+const mf2 = many(2, "MF");
+const moverFormation = "4-3-3";
+const moveSeat = seat(mf2, getFormation(moverFormation));
+const movePins = new Map(Object.entries(moveSeat).map(([sid, c]) => [c.player_id, sid]));
+const ms = moveSpots(mf2[0], mf2, moverFormation, movePins);
+check("moveSpots offers exactly one 'current' (where he sits now)", ms.filter((sp) => sp.kind === "current").length === 1);
+check("moveSpots offers one 'open' (the empty MF slot)", ms.filter((sp) => sp.kind === "open").length === 1);
+check("moveSpots offers one 'bump' (the other MF card, re-seatable)", ms.filter((sp) => sp.kind === "bump").length === 1);
+check("moveSpots never offers a cross-line slot (all MF for an MF card)", ms.every((sp) => sp.slot.line === "MF"));
+check("the 'current' spot carries his effectiveness there", ms.find((sp) => sp.kind === "current").effectiveness === 1.0);
 
 console.log("== openLines: spin never dead-ends ==");
 check("empty roster: all four lines open", openLines([], "4-3-3").size === 4);

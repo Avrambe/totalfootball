@@ -48,7 +48,7 @@ function makeFormation(name, tokens) {
 }
 
 export const FORMATIONS = [
-  makeFormation("4-3-3",   ["GK", "RB", "CB", "CB", "LB", "CDM", "CM", "CM", "RW", "ST", "LW"]),
+  makeFormation("4-3-3",   ["GK", "RB", "CB", "CB", "LB", "CM", "CDM", "CM", "RW", "ST", "LW"]),
   makeFormation("4-4-2",   ["GK", "RB", "CB", "CB", "LB", "RM", "CM", "CM", "LM", "ST", "ST"]),
   makeFormation("4-2-3-1", ["GK", "RB", "CB", "CB", "LB", "CDM", "CDM", "RM", "CAM", "LM", "ST"]),
   makeFormation("4-5-1",   ["GK", "RB", "CB", "CB", "LB", "RM", "CM", "CM", "CM", "LM", "ST"]),

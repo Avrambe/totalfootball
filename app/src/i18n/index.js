@@ -58,15 +58,38 @@ const ROUND_KEY = {
   "Semifinals": "round.semifinals",
   "Final": "round.final",
 };
+// Short labels for cramped knockout rows (mobile); same key suffixes under round.short.*
+const ROUND_SHORT_KEY = {
+  "Round of 32": "round.short.roundOf32",
+  "Round of 16": "round.short.roundOf16",
+  "Quarterfinals": "round.short.quarterfinals",
+  "Semifinals": "round.short.semifinals",
+  "Final": "round.short.final",
+};
+// Natural-English phrase for the share sentence ("I just made the semifinals…").
+const TIER_PHRASE_KEY = {
+  "Champions": "tierPhrase.champions",
+  "Runner-Up": "tierPhrase.runnerUp",
+  "Semifinalists": "tierPhrase.semifinalists",
+  "Quarterfinalists": "tierPhrase.quarterfinalists",
+  "Round of 16": "tierPhrase.roundOf16",
+  "Round of 32": "tierPhrase.roundOf32",
+  "Group Stage Exit": "tierPhrase.groupExit",
+};
 
 export function tierName(tier) {
   const key = TIER_KEY[tier];
   return key ? t(key) : tier;
 }
 
-export function roundName(round) {
-  const key = ROUND_KEY[round];
+export function roundName(round, short = false) {
+  const key = (short ? ROUND_SHORT_KEY : ROUND_KEY)[round];
   return key ? t(key) : round;
+}
+
+export function tierPhrase(tier) {
+  const key = TIER_PHRASE_KEY[tier];
+  return key ? t(key) : tier;
 }
 
 // Browser language → a supported locale (2-char match), else English.

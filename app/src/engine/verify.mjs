@@ -7,6 +7,7 @@ import { quality } from "./squad.js";
 import { GAME } from "../data/loader.js";
 import { runTournament } from "./index.js";
 import { KO_ROUNDS } from "./params.js";
+import { applyStyle, deriveStyle, matchupMultiplier, fieldMatchup, STYLES, DEFAULT_STYLE, SQUAD_CAP, MATCH_CAP, STAMINA_CAP } from "./style.js";
 
 let pass = 0, fail = 0;
 function check(name, cond) {
@@ -101,6 +102,91 @@ for (let i = 0; i < 1500; i++) {
 }
 check(`a 3rd-place finish can advance via the best-thirds rule (saw ${thirdAdvances})`, thirdAdvances > 0);
 check(`group stage still eliminates weak squads sometimes (saw ${exits} exits)`, exits > 0);
+
+console.log("== playing styles (bounded, squad-shape dependent) ==");
+// A seating keyed like the engine expects: { slotId: { position, wc_rating } }. styleSeat sets a flat
+// rating per line; seatByIndex sets a per-slot rating (4-3-3 order: GK, RB CB CB LB, CDM CM CM, RW ST LW).
+const styleSeat = (df, mf, fw, gk = 70) => {
+  const cs = [{ position: "GK", wc_rating: gk }, ...Array(4).fill({ position: "DF", wc_rating: df }),
+    ...Array(3).fill({ position: "MF", wc_rating: mf }), ...Array(3).fill({ position: "FW", wc_rating: fw })];
+  const out = {}; f433.slots.forEach((s, i) => (out[s.id] = cs[i])); return out;
+};
+const seatByIndex = (ratings) => {
+  const out = {}; f433.slots.forEach((s, i) => (out[s.id] = { position: s.line, wc_rating: ratings[i] })); return out;
+};
+const tot = (q) => q.attack + q.defense;
+const baseQ = { attack: 0.80, defense: 0.75 };
+const balancedSeat = styleSeat(75, 75, 75);
+const bal = applyStyle(baseQ, balancedSeat, "4-3-3", DEFAULT_STYLE);
+check("Balanced is a no-op (attack/defense unchanged)", bal.attack === baseQ.attack && bal.defense === baseQ.defense);
+
+// Upside is capped at +SQUAD_CAP; downside can also include the age/stamina penalty (so −(SQUAD_CAP+STAMINA_CAP)).
+const UP = SQUAD_CAP + 1e-9, DOWN = SQUAD_CAP + STAMINA_CAP + 1e-9;
+let withinCap = true;
+for (const st of STYLES) {
+  for (const seat of [styleSeat(90, 90, 90), styleSeat(45, 45, 45), seatByIndex([95, 95, 50, 50, 95, 50, 50, 50, 95, 50, 95])]) {
+    for (const fname of ["4-3-3", "4-4-2", "5-3-2", "3-4-3"]) {
+      const adj = applyStyle(baseQ, seat, fname, st.key);
+      const aR = adj.attack / baseQ.attack, dR = adj.defense / baseQ.defense;
+      if (aR > 1 + UP || aR < 1 - DOWN || dR > 1 + UP || dR < 1 - DOWN) withinCap = false;
+    }
+  }
+}
+check(`every style keeps attack & defense within +${(SQUAD_CAP * 100).toFixed(0)}% / −${((SQUAD_CAP + STAMINA_CAP) * 100).toFixed(0)}% (the caps)`, withinCap);
+
+// A squad BUILT for the counter (strong DF + sharp FW, weak MF) should gain more total strength under
+// Counter than under Possession (which rewards midfield it doesn't have).
+const counterBuilt = styleSeat(92, 55, 90);
+check("a counter-built squad benefits more under Counter than Possession",
+  tot(applyStyle(baseQ, counterBuilt, "4-3-3", "counter")) > tot(applyStyle(baseQ, counterBuilt, "4-3-3", "possession")));
+// And the mirror: a midfield-heavy squad prefers Possession over Counter.
+const possBuilt = styleSeat(58, 95, 60);
+check("a midfield-heavy squad benefits more under Possession than Counter",
+  tot(applyStyle(baseQ, possBuilt, "4-3-3", "possession")) > tot(applyStyle(baseQ, possBuilt, "4-3-3", "counter")));
+// A wing-built squad (strong full-backs + wingers, weak central CB/ST) prefers Wing Play to Direct
+// (Direct kills the flanks: FB/W weights are low, so a flank-built squad is a bad fit for it).
+const wingBuilt = seatByIndex([70, 92, 55, 55, 92, 60, 60, 60, 95, 58, 95]);
+check("a wing-built squad benefits more under Wing Play than Direct",
+  tot(applyStyle(baseQ, wingBuilt, "4-3-3", "wing")) > tot(applyStyle(baseQ, wingBuilt, "4-3-3", "direct")));
+// A back-line-built squad (strong CB + full-backs, weak central midfield) prefers Positional Play
+// (owns CB+FB build-up) to Possession (which rewards the CM/AM creativity it lacks).
+const backlineBuilt = seatByIndex([70, 92, 95, 95, 92, 60, 55, 55, 60, 78, 60]);
+check("a back-line-built squad benefits more under Positional than Possession",
+  tot(applyStyle(baseQ, backlineBuilt, "4-3-3", "positional")) > tot(applyStyle(baseQ, backlineBuilt, "4-3-3", "possession")));
+
+// Formation compatibility moves the number the right way: Possession is High in 4-3-3, Poor in 5-4-1.
+check("formation fit matters: Possession does better in 4-3-3 than 5-4-1 for the same squad",
+  tot(applyStyle(baseQ, balancedSeat, "4-3-3", "possession")) > tot(applyStyle(baseQ, balancedSeat, "5-4-1", "possession")));
+
+// deriveStyle gives any squad a valid non-balanced emergent identity (used to style opponents).
+check("deriveStyle returns a valid non-balanced style", (() => {
+  const k = deriveStyle(counterBuilt, "4-3-3");
+  return k !== "balanced" && STYLES.some((s) => s.key === k);
+})());
+
+console.log("== style matchup (rock-paper-scissors, bounded) ==");
+check("matchup vs Balanced is neutral (1.0)", matchupMultiplier("counter", "balanced") === 1 && matchupMultiplier("balanced", "press") === 1);
+check("a favorable matchup beats the reverse (Counter has the edge over Press)",
+  matchupMultiplier("counter", "press") > matchupMultiplier("press", "counter"));
+let matchInCap = true;
+for (const a of STYLES) for (const b of STYLES) {
+  const m = matchupMultiplier(a.key, b.key);
+  if (m > 1 + MATCH_CAP + 1e-9 || m < 1 - MATCH_CAP - 1e-9) matchInCap = false;
+}
+check(`every style matchup stays within ±${(MATCH_CAP * 100).toFixed(0)}%`, matchInCap);
+
+// Field-centered matchup nets to ~1.0 across the actual opponent distribution: a style gains vs some
+// opponents and loses vs others but has NO standing field-wide edge (no free lunch). Build a non-uniform
+// field and confirm each style's frequency-weighted mean centered multiplier ≈ 1.0.
+const fieldCounts = { possession: 12, counter: 9, press: 7, direct: 5, wing: 6, total: 3, positional: 8 };
+const fc = fieldMatchup(fieldCounts);
+const fieldTot = Object.values(fieldCounts).reduce((s, n) => s + n, 0);
+let fieldNeutral = true;
+for (const y of Object.keys(fieldCounts)) {
+  const mean = Object.entries(fieldCounts).reduce((s, [o, n]) => s + (n / fieldTot) * fc(y, o), 0);
+  if (Math.abs(mean - 1) > 1e-9) fieldNeutral = false;
+}
+check("field-centered matchup nets to ~1.0 across the field for every style (no free lunch)", fieldNeutral);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

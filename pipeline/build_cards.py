@@ -305,6 +305,25 @@ def sanity(cards: list[dict]) -> None:
     for c in hist:
         tier_mix[c.get("tier", "?")] = tier_mix.get(c.get("tier", "?"), 0) + 1
     print(", ".join(f"{k}={v}" for k, v in sorted(tier_mix.items())))
+
+    # Clustering check (Phase Ratings-fix): whole-cohort 5-pt band counts for each cohort. Watch
+    # for a single band holding a disproportionate share (the old hard cap piled 1483 cards at 79).
+    print("-" * 64)
+    print("  5-pt band distribution (clustering check):")
+    for label, group in (("historical", hist), ("2026", cards_2026)):
+        rs = [c["wc_rating"] for c in group]
+        n = len(rs)
+        band_counts: dict[int, int] = {}
+        for r in rs:
+            band_counts[(r // 5) * 5] = band_counts.get((r // 5) * 5, 0) + 1
+        peak_b = max(band_counts, key=band_counts.get) if band_counts else 0
+        peak_pct = band_counts.get(peak_b, 0) / max(n, 1)
+        print(f"  {label} (n={n}) — peak band {peak_b}-{peak_b + 4}: "
+              f"{band_counts.get(peak_b, 0)} ({peak_pct:.1%})")
+        for b in range(0, 100, 5):
+            cnt = band_counts.get(b, 0)
+            bar = "#" * round(cnt / max(n, 1) * 200)
+            print(f"    {b:>2}-{b + 4:<2}: {cnt:>5} {bar}")
     print("=" * 64)
 
 

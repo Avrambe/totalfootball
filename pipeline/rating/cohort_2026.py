@@ -9,19 +9,28 @@ The 2026 rating therefore has two tiers:
      rank→rating curve (ceiling 97; no age factor — the lists already price age). The top should
      reflect cross-publication consensus, not our own proxy stats (which minted role-players at 98).
 
-  2. COMPOSITE tier (everyone else, ~1,100 players) — a de-inflated proxy:
-         composite = blend({H: club_form, M: age_corrected_market_value, G: stature, base: 0.5},
-                           w={H:.45, M:.30, G:.15, base:.10})
-         raw       = composite × age_factor                       (Layer 0)
-     then percentile-ranked within position and QUANTILE-MATCHED to the pooled HISTORICAL
-     per-position rating distribution (below the consensus floor) for real cross-era comparability,
-     and finally CAPPED at CONSENSUS_FLOOR−1 so no non-listed player can outrank a listed one.
+  2. COMPOSITE tier (everyone else, ~1,100 players) — a de-inflated proxy, age-corrected
+     MARKET VALUE as the backbone (see `_composite`):
+         composite = backbone(market_value) refined by club_form (lift-only), floored by stature
+         raw       = composite × age_factor(position)            (Layer 0, gentle for keepers)
+     then percentile-ranked within position and mapped onto a TARGET rating BAND defined by a
+     mean + standard deviation (N(TARGET_MEAN, TARGET_SD) via inverse-normal — a robust rank-based
+     z-score). The 2026 cohort is a truncated population (every card is a WC-squad professional), so
+     it gets its own believable band — a "fringe pro" floor and a tight spread — instead of
+     inheriting football history's amateur-to-legend shape (which sent keepers to 2 and capped strong
+     mid-tier nations in the high 60s). Finally CAPPED at CONSENSUS_FLOOR−1 so no non-listed player
+     can outrank a listed one.
 
 Key changes from the first 2026 pass (which over-rated weak-league veterans, e.g. Laimer 98):
   - International caps REMOVED entirely — caps measure national-team volume, not skill.
-  - Market value ADDED as a broad component, but AGE-CORRECTED first (`_age_premium`): MV
-    over-prices youth (resale potential) and under-prices age, so we divide that bias out to get a
-    current-skill proxy. This rescues good players in mediocre/uncovered leagues (Mané, Mahrez…).
+  - Market value is the BACKBONE, but AGE-CORRECTED first (`_age_premium`): MV over-prices youth
+    (resale potential) and under-prices age, so we divide that bias out to get a current-skill
+    proxy. It covers ~65% of the cohort incl. non-European leagues, rescuing good players in
+    mediocre/uncovered leagues (Mané, Mahrez…) and lifting real internationals (Mathew Ryan).
+  - The INVERTED 0.5 baseline is GONE (Phase Ratings-fix-2): it let no-data players outrank real
+    ones. Club form is now an *asymmetric* refinement (lifts at full weight, drags at a throttle)
+    so a quality player at a small club isn't punished for the club; truly invisible players sink
+    to LOW_PRIOR. The age curve is position-aware (keepers peak late, decline slowly).
   - The raw-MV youth FLOOR is gone (consensus + age-corrected M handle youth properly); the
     `volatility` tag is KEPT (the Phase-6 engine's young-player boom/bust channel).
 
@@ -33,7 +42,7 @@ import json
 import math
 import re
 import sys
-from statistics import median
+from statistics import median, NormalDist
 
 try:
     from .._shared import RAW, norm_name, percentile_ranks, to_1_99
@@ -49,10 +58,22 @@ except ImportError:
 
 YEAR = 2026
 POSITIONS = ("GK", "DF", "MF", "FW")
-# Composite weights for the NON-consensus tier. H = club form, M = age-corrected market value,
-# G = career stature, base = neutral prior. (Caps/international-standing removed — they rewarded
-# volume, not skill, and inflated weak-league veterans.)
-WEIGHTS = {"H": 0.45, "M": 0.30, "G": 0.15, "base": 0.10}
+
+# --- Composite recipe for the NON-consensus tier (Phase Ratings-fix-2) ----------------------------
+# The old recipe blended H/M/G over a constant 0.5 baseline. That baseline was INVERTED: a player
+# with no data at all scored 0.50, which BEAT real players whose club-form (a club-strength proxy,
+# not a quality proxy) came out below 0.50 — so Australia's captain-keeper Mathew Ryan (real club +
+# real €2M value) landed at 26 while an unknown A-League kid with no data sat on top at 67.
+#
+# The fix makes **age-corrected market value the backbone** (it's the one signal that measures the
+# PLAYER, not his club, and it covers ~65% of the cohort including non-European leagues), with
+# club-form as an *asymmetric* refinement (it can lift a player who's clearly performing at a high
+# level, but is throttled when it would drag a good player down just for playing at a small club),
+# career stature as an elite floor, and a genuinely LOW prior for the truly invisible.
+LOW_PRIOR = 0.18        # no club, no market value, no stature → sinks to the bottom of the pool
+W_CLUB = 0.40           # club-form's weight when it LIFTS the market-value backbone
+CLUB_DRAG = 0.30        # club-form's weight is throttled to this fraction when it would DRAG
+G_FLOOR_PULL = 0.55     # how hard a career-stature signal pulls the estimate up toward itself
 
 # --- Young-player volatility tag (Spec §5) --------------------------------------------------
 # The rating itself is a clean point estimate; the per-match boom/bust for young players lives in
@@ -146,17 +167,59 @@ def _mv_norm(mv: float | None, low: float, high: float) -> float | None:
     return max(0.0, min(1.0, (math.log10(mv) - low) / (high - low)))
 
 
-def _calibrate(pct: float, pos: str, hist_by_pos: dict | None) -> int:
-    """Quantile-match a composite percentile to the pooled HISTORICAL per-position distribution,
-    using only historical ratings BELOW the consensus floor as the reference (so the composite tier
-    spreads across the realistic mid/low band instead of clustering at the cap). Falls back to a
-    plain 1–99 map when no historical reference is supplied (standalone smoke test)."""
-    if not hist_by_pos or pos not in hist_by_pos:
-        return to_1_99(pct)
-    ref = sorted(r for r in hist_by_pos[pos] if r < CONSENSUS_FLOOR)
-    if not ref:
-        return to_1_99(pct)
-    return ref[int(round(pct * (len(ref) - 1)))]
+def _composite(m: float | None, h: float | None, g: float | None) -> float:
+    """Blend the three 2026 signals into a 0..1 quality estimate (Phase Ratings-fix-2).
+
+    m = age-corrected market value, h = club form, g = career stature — each None when absent.
+
+      1. Backbone = market value if we have it; else club form (the only quality signal left);
+         else LOW_PRIOR (truly invisible player).
+      2. Club form refines the MV backbone *asymmetrically*: full weight (W_CLUB) when it LIFTS the
+         estimate (a player clearly playing well at a high level), throttled (CLUB_DRAG) when it
+         would DRAG (so a quality player at a small club isn't punished for the club, only the MV).
+      3. Career stature is an elite floor: an award standing can only pull the estimate UP.
+    """
+    if m is not None:
+        base = m
+        if h is not None:
+            w = W_CLUB if h >= base else W_CLUB * CLUB_DRAG
+            base = (1 - w) * base + w * h
+    elif h is not None:
+        base = h
+    else:
+        base = LOW_PRIOR
+    if g is not None and g > base:
+        base = (1 - G_FLOOR_PULL) * base + G_FLOOR_PULL * g
+    return base
+
+
+# --- Composite-tier normalization: map onto a TARGET BAND (mean/SD), not the historical shape ------
+# Earlier passes quantile-matched the composite percentile onto the full historical per-position
+# distribution. That distribution spans 1930s amateurs to modern pros, so a mid-table 2026 squad
+# player (still a full professional international) inherited an amateur's low rating — keepers landing
+# at 2, Bundesliga regulars at 10 — and a strong mid-tier nation's best non-elite player topped out
+# in the high 60s. Both are wrong: the 2026 cohort is a TRUNCATED population (every card is a WC
+# squad professional), so it should have a HIGHER floor and a TIGHTER spread than all of football
+# history.
+#
+# We therefore normalize to an explicit target band defined by a mean + standard deviation (the
+# user's suggested statistical approach). Each player's within-position percentile is mapped through
+# the inverse-normal of N(TARGET_MEAN, TARGET_SD) — a robust rank-based z-score. This guarantees a
+# believable centre (~TARGET_MEAN), a believable spread, a floor that reads as "fringe squad player"
+# (never amateur), and a top that lets the best non-elite players reach the low 80s (just under the
+# consensus floor). All four numbers below are tunable.
+TARGET_MEAN = 62.0      # median 2026 squad player ≈ a solid international
+TARGET_SD = 10.0        # spread; ±2 SD ≈ [40, 80], landing just under the consensus floor
+RATING_FLOOR = 40       # a qualified-WC-squad professional is never rated like an amateur
+P_CLAMP = 0.02          # clamp the percentile tails so extremes don't blow past the band
+
+_TARGET = NormalDist(TARGET_MEAN, TARGET_SD)
+
+
+def _target_rating(pct: float) -> int:
+    """Map a within-position percentile (0..1) onto the target N(mean, SD) rating band."""
+    p = min(1.0 - P_CLAMP, max(P_CLAMP, pct))
+    return round(_TARGET.inv_cdf(p))
 
 
 # Squad team names that are not in the Fjelstul spine. DR Congo == Zaire's COD; the four debutants
@@ -251,9 +314,7 @@ def build_cards(hist_by_pos: dict | None = None) -> list[dict]:
     # Composite raw for every card (consensus cards keep it too; it's just unused for them).
     for c in raw:
         m = _mv_norm(c["mv"] / age_premium(c["age"]), mv_low, mv_high) if c["mv"] else None
-        composite = combine._blend(
-            {"H": c["h"], "M": m, "G": c["g_blend"], "base": 0.5}, WEIGHTS)
-        c["_raw"] = composite * age_curve.age_factor(c["age"])
+        c["_raw"] = _composite(m, c["h"], c["g_blend"]) * age_curve.age_factor(c["age"], c["pos"])
 
     # Consensus tier: merged industry rankings -> direct ratings for matched participants.
     consensus, _order, _unmatched = consensus_2026.build_ratings([c["name"] for c in raw])
@@ -284,8 +345,8 @@ def build_cards(hist_by_pos: dict | None = None) -> list[dict]:
         group = [c for c in cards if c["position"] == pos and c["_tier"] == "composite"]
         pct = percentile_ranks([c["_raw"] for c in group])
         for c, rp in zip(group, pct):
-            calibrated = _calibrate(rp, pos, hist_by_pos)
-            c["wc_rating"] = min(CONSENSUS_FLOOR - 1, max(calibrated, c["_g_floor"]))
+            base = _target_rating(rp)
+            c["wc_rating"] = min(CONSENSUS_FLOOR - 1, max(base, c["_g_floor"], RATING_FLOOR))
 
     for c in cards:
         del c["_raw"], c["_g_floor"], c["_tier"]

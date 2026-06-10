@@ -7,7 +7,7 @@
 import { C } from "../theme.js";
 import { getFormation } from "../positions/formations.js";
 import { lastName } from "../util/name.js";
-import { t, tierName } from "../i18n/index.js";
+import { t, tierName, tierPhrase } from "../i18n/index.js";
 
 // Flip to false to drop flags from the card if they read too busy (trivial removal, per the user).
 const FLAGS_ON_CARD = true;
@@ -53,7 +53,7 @@ export async function generateShareImage({ result, seating, formationName, confi
   const cards = Object.values(seating || {});
   const flags = await loadFlags(cards.map((c) => c.team_code));
 
-  const S = 2, W = 520, H = 880;
+  const S = 2, W = 520, H = 740;
   const c = document.createElement("canvas"); c.width = W * S; c.height = H * S;
   const g = c.getContext("2d"); g.scale(S, S);
   const L = 30, R = W - 30;
@@ -64,22 +64,22 @@ export async function generateShareImage({ result, seating, formationName, confi
 
   // header
   g.textAlign = "center";
-  g.font = "40px Anton,sans-serif"; g.fillStyle = C.gold; g.fillText("TOTAL FOOTBALL", W / 2, 48);
-  g.font = "15px Oswald,sans-serif"; g.fillStyle = C.chalk; g.fillText(t("share.cardSubtitle"), W / 2, 70);
+  g.font = "40px 'Bebas Neue',sans-serif"; g.fillStyle = C.gold; g.fillText("TOTAL FOOTBALL", W / 2, 48);
+  g.font = "15px Inter,sans-serif"; g.fillStyle = C.chalk; g.fillText(t("share.cardSubtitle"), W / 2, 70);
 
   // mode pill
   const modeLabel = t(config && config.mode === "diehard" ? "mode.diehard" : "mode.classic").toUpperCase();
-  drawPill(g, W / 2, 86, modeLabel, C.gold, C.ink, "bold 11px Oswald,sans-serif");
+  drawPill(g, W / 2, 86, modeLabel, C.gold, C.ink, "bold 11px Inter,sans-serif");
 
   // tier — where you made it (the headline)
-  g.font = "34px Anton,sans-serif"; g.fillStyle = champ ? C.gold : C.chalk;
+  g.font = "34px 'Bebas Neue',sans-serif"; g.fillStyle = champ ? C.gold : C.chalk;
   g.textAlign = "center"; g.fillText(tierName(result.tier).toUpperCase(), W / 2, 152);
 
   // grade badge (champions only), to the right of the tier
   if (champ && result.grade) {
     const bw = 52, bh = 52, bx = W - 30 - bw, by = 116;
     g.strokeStyle = C.gold; g.lineWidth = 2; roundRect(g, bx, by, bw, bh, 8); g.stroke();
-    g.fillStyle = C.gold; g.font = "34px Anton,sans-serif"; g.textAlign = "center";
+    g.fillStyle = C.gold; g.font = "34px 'Bebas Neue',sans-serif"; g.textAlign = "center";
     g.fillText(result.grade, bx + bw / 2, by + 38);
   }
 
@@ -88,15 +88,15 @@ export async function generateShareImage({ result, seating, formationName, confi
   g.textAlign = "center";
   const dStr = (result.diff >= 0 ? "+" : "") + result.diff;
   const deltaStr = (result.eloDelta >= 0 ? "+" : "") + result.eloDelta;
-  g.font = "16px 'JetBrains Mono',monospace"; g.fillStyle = C.gold;
+  g.font = "16px Inter,monospace"; g.fillStyle = C.gold;
   g.fillText(`${t("share.cardElo")} ${result.elo}  (${deltaStr})`, W / 2, y);
   y += 22;
-  g.font = "14px 'JetBrains Mono',monospace"; g.fillStyle = C.chalk;
+  g.font = "14px Inter,monospace"; g.fillStyle = C.chalk;
   g.fillText(`${dStr} ${t("share.cardDiff")}  ·  ${result.goalsFor}-${result.goalsAgainst}`, W / 2, y);
   y += 18;
 
   // mini pitch with the XI
-  const PX = L, PW = R - L, PY = y, PH = 470;
+  const PX = L, PW = R - L, PY = y, PH = 440;
   g.fillStyle = C.pitch; roundRect(g, PX, PY, PW, PH, 10); g.fill();
   // markings (attack up: halfway line + circle near top, box at bottom)
   g.strokeStyle = C.pitchLine; g.lineWidth = 1;
@@ -111,38 +111,47 @@ export async function generateShareImage({ result, seating, formationName, confi
   for (const slot of formation.slots) {
     const card = seating[slot.id];
     const cx = PX + slot.x * PW;
-    const cy = PY + slot.y * PH;
+    // Inset the vertical span so the forward line sits just below the halfway line and the keeper
+    // clears the box edge — pulls the lines a touch closer (the "tighter spacing" the user asked for).
+    const cy = PY + (0.07 + slot.y * 0.86) * PH;
     drawChip(g, cx, cy, slot, card, flags);
   }
   y = PY + PH;
 
-  // footer
-  y += 30;
-  g.strokeStyle = C.pitchLine; g.lineWidth = 1; g.beginPath(); g.moveTo(L, y - 14); g.lineTo(R, y - 14); g.stroke();
-  g.font = "bold 13px Oswald,sans-serif"; g.fillStyle = C.chalk; g.textAlign = "left";
-  g.fillText(t("share.cardTagline"), L, y + 8);
-  if (SHARE_URL) { g.fillStyle = C.gold; g.textAlign = "right"; g.fillText(SHARE_URL, R, y + 8); }
+  // footer — the shareable sentence, big and centered (replaces the old dead tagline box).
+  // Grammar via tierPhrase: "I just made the semifinals." not "I just took Semifinalists".
+  y += 36;
+  g.strokeStyle = C.pitchLine; g.lineWidth = 1; g.beginPath(); g.moveTo(L, y - 18); g.lineTo(R, y - 18); g.stroke();
+  const sentence = t("share.cardSentence", { phrase: tierPhrase(result.tier) });
+  g.font = "bold 22px Inter,sans-serif"; g.fillStyle = C.gold; g.textAlign = "center";
+  g.fillText(sentence, W / 2, y + 8);
+  if (SHARE_URL) {
+    g.font = "13px Inter,sans-serif"; g.fillStyle = C.chalk; g.textAlign = "center";
+    g.fillText(SHARE_URL, W / 2, y + 30);
+  }
 
   return new Promise((resolve) => c.toBlob(resolve, "image/png"));
 }
 
 function drawChip(g, cx, cy, slot, card, flags) {
-  const w = 84, h = 40, x = cx - w / 2, ytop = cy - h / 2;
-  g.fillStyle = "rgba(0,0,0,.42)"; roundRect(g, x, ytop, w, h, 6); g.fill();
-  g.strokeStyle = C.pitchLine; g.lineWidth = 1; roundRect(g, x, ytop, w, h, 6); g.stroke();
+  // Bigger chip with token / name / flag on their OWN rows so the flag and name never overlap.
+  const w = 96, h = 56, x = cx - w / 2, ytop = cy - h / 2;
+  g.fillStyle = "rgba(0,0,0,.45)"; roundRect(g, x, ytop, w, h, 7); g.fill();
+  g.strokeStyle = C.pitchLine; g.lineWidth = 1; roundRect(g, x, ytop, w, h, 7); g.stroke();
   g.textAlign = "center";
-  g.font = "bold 9px Oswald,sans-serif"; g.fillStyle = "rgba(243,244,239,.75)";
-  g.fillText(slot.token, cx, ytop + 12);
+  g.font = "bold 10px Inter,sans-serif"; g.fillStyle = "rgba(243,244,239,.7)";
+  g.fillText(slot.token, cx, ytop + 14);          // row 1: position
   if (!card) return;
   let nm = lastName(card.name) || "";
-  if (nm.length > 12) nm = nm.slice(0, 11) + "…";
-  g.font = "600 12px Oswald,sans-serif"; g.fillStyle = C.chalk; g.fillText(nm, cx, ytop + 26);
-  const img = flags.get(card.team_code);
+  if (nm.length > 13) nm = nm.slice(0, 12) + "…";
+  g.font = "600 13px Inter,sans-serif"; g.fillStyle = C.chalk;
+  g.fillText(nm, cx, ytop + 32);                   // row 2: name
+  const img = flags.get(card.team_code);           // row 3: flag (or text code)
   if (img) {
-    const fw = 15, fh = 11;
-    try { g.drawImage(img, cx - fw / 2, ytop + h - 13, fw, fh); } catch (e) {}
+    const fw = 22, fh = 15;
+    try { g.drawImage(img, cx - fw / 2, ytop + h - 19, fw, fh); } catch (e) {}
   } else {
-    g.font = "9px 'JetBrains Mono',monospace"; g.fillStyle = "rgba(243,244,239,.7)";
-    g.fillText(card.team_code, cx, ytop + h - 4);
+    g.font = "10px Inter,monospace"; g.fillStyle = "rgba(243,244,239,.7)";
+    g.fillText(card.team_code, cx, ytop + h - 8);
   }
 }

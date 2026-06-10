@@ -1,7 +1,7 @@
 // Shared design tokens (the pitch palette, fonts, splash layout). Kept in its own module so screens
 // can import them without creating a circular dependency through app.jsx.
 
-export const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap');`;
+export const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');`;
 
 export const C = {
   pitchDeep: "#0a1f14",
@@ -22,4 +22,8 @@ export const splash = {
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
+  // Horizontal gutters so content never touches the screen edge on a narrow phone (iPhone 390).
+  paddingLeft: 14,
+  paddingRight: 14,
+  boxSizing: "border-box",
 };

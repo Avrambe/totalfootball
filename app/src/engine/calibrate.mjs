@@ -22,6 +22,8 @@ const { runBracket, opponentPool } = await import("./bracket.js");
 const { playMatch } = await import("./match.js");
 const { quality } = await import("./squad.js");
 const { eraSquads, squadCards } = await import("../spin/pools.js");
+const { STYLES, applyStyle, SQUAD_CAP, MATCH_CAP, STAMINA_CAP } = await import("./style.js");
+const { getFormation, DEFAULT_FORMATION } = await import("../positions/formations.js");
 
 const ERA = "alltime";
 const pool = opponentPool(ERA);
@@ -98,6 +100,47 @@ for (const [name, quality] of LEVELS) {
   console.log(`               group: top-2 ${(viaTop2 / N * 100).toFixed(0)}%, via-3rd ${(viaThird / N * 100).toFixed(0)}%, out ${(eliminated / N * 100).toFixed(0)}%`);
   console.log(`               tiers: ${Object.entries(tierHist).map(([t, c]) => `${t} ${(c / N * 100).toFixed(0)}%`).join(", ")}`);
 }
+
+// --- Style swing: how much does the style CHOICE move a fixed squad's champion%? ---------------
+// "Style is seasoning, roster is the meal" — we want the best-vs-worst style spread to be modest
+// (single-digit champion-% points), confirming style tunes outcomes without overpowering quality.
+// Build a real dream-team seating (cards with positions + ages) so applyStyle sees actual slots.
+function dreamSeating(era) {
+  const squads = eraSquads(era);
+  const need = { GK: 1, DF: 4, MF: 3, FW: 3 };
+  const picked = [];
+  let guard = 0;
+  while (picked.length < 11 && guard++ < 2000) {
+    const sq = squads[Math.floor(Math.random() * squads.length)];
+    const cands = squadCards(sq.teamCode, sq.year).filter((c) => need[c.position] > 0 && c.wc_rating >= 88);
+    if (!cands.length) continue;
+    const card = cands.reduce((a, b) => (b.wc_rating > a.wc_rating ? b : a));
+    need[card.position]--; picked.push(card);
+  }
+  const slots = (getFormation("4-3-3") || getFormation(DEFAULT_FORMATION)).slots;
+  const byLine = { GK: [], DF: [], MF: [], FW: [] };
+  for (const c of picked) byLine[c.position].push(c);
+  const seating = {};
+  for (const slot of slots) { const c = byLine[slot.line] && byLine[slot.line].shift(); if (c) seating[slot.id] = c; }
+  return seating;
+}
+
+const seating = dreamSeating(ERA);
+const baseDreamQ = quality(Object.values(seating));
+const NS = 12000;
+const swing = [];
+for (const s of STYLES) {
+  const sq = applyStyle(baseDreamQ, seating, "4-3-3", s.key);
+  let champs = 0;
+  for (let i = 0; i < NS; i++) if (runBracket({ quality: sq, style: s.key }, ERA).tier === "Champions") champs++;
+  swing.push([s.key, champs / NS * 100]);
+}
+swing.sort((a, b) => b[1] - a[1]);
+const best = swing[0], worst = swing[swing.length - 1];
+console.log(`\nstyle swing on a fixed dream team (caps: fit ±${(SQUAD_CAP * 100).toFixed(0)}%, matchup ±${(MATCH_CAP * 100).toFixed(0)}%, stamina −${(STAMINA_CAP * 100).toFixed(0)}%):`);
+console.log(`  base dream quality: attack ${baseDreamQ.attack.toFixed(3)}, defense ${baseDreamQ.defense.toFixed(3)}`);
+for (const [k, p] of swing) console.log(`    ${k.padEnd(11)} champions ${p.toFixed(1).padStart(5)}%`);
+console.log(`  best (${best[0]}) − worst (${worst[0]}) = ${(best[1] - worst[1]).toFixed(1)} pts spread`);
 
 // Upset frequency: a fixed mismatch (clearly stronger vs clearly weaker) over many single matches.
 const strong = q(pct(atk, .85), pct(def, .85)), weakO = q(pct(atk, .25), pct(def, .25));
