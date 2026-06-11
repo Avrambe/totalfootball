@@ -428,6 +428,24 @@ Scorelines intentionally omitted from the card. Verified: `npm run build` clean,
 image renders at exactly 1080×1350 with no clipping. **Needs manual device testing:** `navigator.share`
 (the double-URL fix) and `ClipboardItem` image copy can't be exercised in the sandbox.
 
+**Phase Style-edit (interactive squad on the Style screen + richer style explanations), 2026-06-11:**
+the playing-style screen's XI is now **editable** like the draft board (was read-only `SquadPitch`).
+Two new shared components: `components/Board.jsx` (the presentational pieces — `FormationPicker`,
+`PitchBoard`, `LineBoard`, `SlotChip`, `PlacingBanner` — extracted verbatim from `Draft.jsx`, which now
+imports them) and `components/EditableSquad.jsx` (a move-only state machine over the `offer.js` helpers:
+`seat`, `holdingFormations`, `moveSpots`, `bestLineup` — tap a player to move/swap, change formation
+with optimal re-seat; no spin/offer/placement paths). `Style.jsx` embeds `EditableSquad` and threads the
+edited lineup out via `onChange`; `app.jsx`'s Style `onStart(styleKey, editedSeating, editedFormation)`
+runs the tournament on the **edited** XI (so Style-screen edits flow into the result/share/leaderboard).
+Richer descriptions: a `style.<key>.descLong` reward+vulnerability sentence (×8, all 6 locales) plus an
+auto-generated "Best with / Weak with" formation hint derived from `engine/style.js` `formationHints()`
+(reads `FORMATION_FIT`; balanced has no entry → no hint line) — shown **classic-only**; Expert keeps the
+short `desc`. Verified live: Board extraction didn't break the draft loop; on the Style screen the board
+is interactive (move/swap/formation all work), the classic descLong + per-style hint line render and
+change with the dropdown, and START runs the tournament on the edited lineup (a CDM↔CM swap made on the
+Style screen showed up on the Result pitch, header "2026 · Classic · Possession"). `npm run build`
+clean; all 6 JSONs parse.
+
 ## Working norms (user is non-technical)
 - Explain *why*, not just *what*; flag tradeoffs. Never commit/push without explicit instruction.
 - Confirm before destructive actions. Check in at the end of each phase.

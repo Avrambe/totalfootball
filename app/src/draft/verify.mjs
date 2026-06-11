@@ -203,8 +203,8 @@ const target = { teamCode: "BRA", name: "Brazil", year: 1994 };
 const full = reelFrames("alltime", target, { team: true, year: true }, 14);
 check("full draw: 14 frames", full.length === 14);
 check("full draw: no impossible combos (e.g. Italy 1994)", full.every((f) => real.has(`${f.team}|${f.year}`)));
-check("full draw: year settles before the team finishes (a tail of frames is locked to target year)",
-  full.slice(-4).every((f) => f.year === 1994));
+check("full draw: both axes tumble together (year is not locked early; runReel snaps the final frame)",
+  new Set(full.map((f) => f.year)).size >= 2 && new Set(full.map((f) => f.team)).size >= 2);
 
 const yr = reelFrames("alltime", target, { team: false, year: true }, 14); // respin YEAR, hold Brazil
 check("respin year: team is always held to Brazil", yr.every((f) => f.team === "Brazil"));

@@ -84,6 +84,19 @@ const MATCHUP = Object.fromEntries(
   Object.entries(MATCHUP_ROWS).map(([k, row]) => [k, Object.fromEntries(MK.map((c, i) => [c, row[i]]))])
 );
 
+// Best/weak formations for a style, read straight from FORMATION_FIT (+1 High / −1 Poor). Sliced to a
+// few each so the on-screen hint stays readable. Balanced has no entry → empty hints.
+export function formationHints(styleKey) {
+  const fit = FORMATION_FIT[styleKey];
+  if (!fit) return { best: [], weak: [] };
+  const best = [], weak = [];
+  for (const [name, v] of Object.entries(fit)) {
+    if (v > 0) best.push(name);
+    else if (v < 0) weak.push(name);
+  }
+  return { best: best.slice(0, 3), weak: weak.slice(0, 3) };
+}
+
 // How well a seating fits a style: a slot-weighted rating edge over the squad's flat mean (relScaled),
 // and the formation compatibility (formComp). relScaled > 0 ⇒ the squad is genuinely BUILT for this.
 function fitScore(seating, formationName, key) {

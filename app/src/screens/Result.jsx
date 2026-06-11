@@ -153,7 +153,7 @@ function PostBlock({ config, result, seating, clientKey, gamePosted, setGamePost
               value={name} onChange={(e) => setName(e.target.value)} maxLength={24}
               placeholder={t("leaderboard.namePlaceholder")}
               autoCorrect="off" spellCheck={false}
-              style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 6, border: `1px solid ${C.pitchLine}`, background: "rgba(0,0,0,.25)", color: C.chalk, fontFamily: "Inter, sans-serif", fontSize: 14 }}
+              style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 6, border: `1px solid ${C.pitchLine}`, background: "rgba(0,0,0,.25)", color: C.chalk, fontFamily: "Inter, sans-serif", fontSize: 16 }}
             />
             <button onClick={doPost} style={{ ...lbViewBtn, opacity: posting ? 0.6 : 1 }}>
               {posting ? t("leaderboard.posting") : t("leaderboard.post")}

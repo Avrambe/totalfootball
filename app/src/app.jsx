@@ -88,8 +88,12 @@ export default function App() {
         config={config}
         seating={squad}
         formationName={formationName}
-        onStart={(styleKey) => {
-          setResult(runTournament(squad, formationName, config.era, styleKey));
+        onStart={(styleKey, editedSeating, editedFormation) => {
+          const playSeating = editedSeating || squad;
+          const playFormation = editedFormation || formationName;
+          setSquad(playSeating);
+          setFormationName(playFormation);
+          setResult(runTournament(playSeating, playFormation, config.era, styleKey));
           setClientKey(newClientKey());
           setGamePosted(false);
           setScreen("result");
