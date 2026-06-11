@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { t } from "../i18n/index.js";
 import { C, FONTS, splash } from "../theme.js";
 import { topScores, boardConfigured } from "../leaderboard/board.js";
+import { displayCap, scoreCount, MAX_ROWS } from "../leaderboard/cap.js"; // TEMPORARY dynamic sizing
 import SquadPitch from "../components/SquadPitch.jsx";
 
 const ERAS = ["2026", "modern", "alltime"];
@@ -20,9 +21,15 @@ export default function Leaderboard({ onBack, initial }) {
     let live = true;
     setRows(null); setErr(false);
     if (!boardConfigured()) { setErr(true); return; }
-    topScores(era, mode, tf)
-      .then((d) => { if (live) setRows(d); })
+    // ── DYNAMIC LEADERBOARD SIZING (temporary — see leaderboard/cap.js) ───────────
+    // Fetch a deep board, but only reveal a "round" number of names based on how many
+    // scores actually exist for this view, so a young board doesn't advertise its size.
+    // TO RETIRE: replace this block with `topScores(era, mode, tf).then((d) => { if (live) setRows(d); })`
+    // and delete the cap.js import above.
+    Promise.all([topScores(era, mode, tf, MAX_ROWS), scoreCount(era, mode, tf)])
+      .then(([d, total]) => { if (live) setRows(d.slice(0, displayCap(total))); })
       .catch(() => { if (live) setErr(true); });
+    // ── end dynamic sizing ───────────────────────────────────────────────────────
     return () => { live = false; };
   }, [era, mode, tf]);
 

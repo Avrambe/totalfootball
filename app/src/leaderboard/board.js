@@ -4,10 +4,11 @@
 //
 // SETUP: create a Supabase project, run SUPABASE.sql (repo root), then paste the project URL +
 // publishable anon key below. Until then the board is inert (calls reject and the UI shows an error).
-const SB_URL = "https://skmztomaygdjxbfeyjyj.supabase.co";   // e.g. "https://xxxxxxxx.supabase.co"
-const SB_KEY = "sb_publishable_udsLFmbG8d4vxxg8plsLIA_4vBVRN69";   // the publishable anon key (safe to ship; writes are RPC-gated)
+// Exported so the (temporary) dynamic-sizing helper in cap.js can reuse the same connection.
+export const SB_URL = "https://skmztomaygdjxbfeyjyj.supabase.co";   // e.g. "https://xxxxxxxx.supabase.co"
+export const SB_KEY = "sb_publishable_udsLFmbG8d4vxxg8plsLIA_4vBVRN69";   // the publishable anon key (safe to ship; writes are RPC-gated)
 
-const SB_H = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
+export const SB_H = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
 export const boardConfigured = () => !!(SB_URL && SB_KEY);
 
 export const configKey = (era, mode) => `${era}-${mode}`;
@@ -43,11 +44,14 @@ export async function submitScore({ era, mode, name, result, seating, clientKey 
   return r.json();
 }
 
-export async function topScores(era, mode, timeframe) {
+// `limit` defaults to 25 (the standard board depth and what leaderboardStanding relies on). The
+// leaderboard screen passes a larger limit so the temporary dynamic-sizing logic (cap.js) can trim
+// the visible list down to a "round" number — see app/src/leaderboard/cap.js.
+export async function topScores(era, mode, timeframe, limit = 25) {
   if (!boardConfigured()) throw new Error("Leaderboard not configured");
   let u = `${SB_URL}/rest/v1/scores?config=eq.${configKey(era, mode)}`
     + `&select=name,elo,tier,grade,goals_for,goals_against,diff,squad,created_at`
-    + `&order=elo.desc,created_at.asc&limit=25`;
+    + `&order=elo.desc,created_at.asc&limit=${limit}`;
   if (timeframe === "today") u += `&created_at=gte.${new Date(Date.now() - 864e5).toISOString()}`;
   else if (timeframe === "week") u += `&created_at=gte.${new Date(Date.now() - 6048e5).toISOString()}`;
   const r = await fetch(u, { headers: SB_H });
@@ -88,6 +92,8 @@ export async function realPct(era, mode, elo) {
     });
     if (!r.ok) return null;
     const d = await r.json();
-    return d && d.pct != null ? d.pct : null;
+    // PostgREST returns a table-valued function as an array of rows: [{ pct: 23 }].
+    const row = Array.isArray(d) ? d[0] : d;
+    return row && row.pct != null ? row.pct : null;
   } catch (e) { return null; }
 }
